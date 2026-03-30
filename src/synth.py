@@ -15,11 +15,13 @@ class Graph:
         print(f"state = '{self.init.name}'")
         print("for i in range(100):")
         print('\tprint("state", state)')
+        # print('\tprint("temps", tmp_a, tmp_b, tmp_c, tmp_d)')
         for state in self.vtcs:
             print(f"\tif state == '{state.name}':")
             for t in self.transitions:
                 if t.s_from != state: continue
                 if t.unfinished: print(f"\t\tif {' and '.join(f'tmp_{c.name}' for c in t.unfinished)}:")
+                elif t.finished: print(f"\t\tif {' and '.join(f'not tmp_{c.name}' for c in t.finished)}:")
                 else: print(f"\t\tif True:")
                 if t.when: print(f"\t\t\tif {' and '.join(f'tmp_{c.lhs.name} {c.kind} tmp_{c.rhs.name}' for c in t.when)}:")
                 else: print(f"\t\t\tif True:")
@@ -27,8 +29,8 @@ class Graph:
                 for src in t.pull: print(f"\t\t\t\ttmp_{src.name} = {src.name}.pull()")
                 print(f"\t\t\t\tstate = '{t.s_to.name}'")
                 print(f"\t\t\t\tcontinue")
-            print("\t\t\tprint(state, 'not continued!')")
-            print("\t\t\tbreak")
+            print("\t\tprint(state, 'not continued!')")
+            print("\t\tbreak")
     def dot(self):
         ...
 class Node:
@@ -44,11 +46,11 @@ class Cond:
     def __init__(self, kind: Literal["=="] | Literal["<"] | Literal[">"], lhs: Src, rhs: Src):
         self.kind = kind; self.lhs = lhs; self.rhs = rhs
 class Transition:
-    def __init__(self, s_from, s_to, when, push, pull, unfinished):
-        self.s_from = s_from; self.s_to = s_to; self.when = when; self.push = push; self.pull = pull; self.unfinished = unfinished
+    def __init__(self, s_from, s_to, when, push, pull, unfinished, finished):
+        self.s_from = s_from; self.s_to = s_to; self.when = when; self.push = push; self.pull = pull; self.unfinished = unfinished; self.finished = finished;
 class Vtx(Node):
-    def to(self, other, *when, push=(), pull=(), unfinished=()):
-        self.graph.transitions.append(Transition(self, other, when, push, pull, unfinished))
+    def to(self, other, *when, push=(), pull=(), unfinished=(), finished=()):
+        self.graph.transitions.append(Transition(self, other, when, push, pull, unfinished, finished))
 
 def ctx():
 
@@ -114,6 +116,9 @@ class Source:
         self.data = [*sorted(s)]
         self.index = 0
     def pull(self):
+        if self.index >= len(self.data):
+            print(f"pulled None from {self.name}")
+            return None
         ret = self.data[self.index]
         print(f"pulled {ret} from {self.name}")
         self.index += 1
