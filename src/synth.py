@@ -23,7 +23,12 @@ class Graph:
                 if t.unfinished: print(f"\t\tif {' and '.join(f'tmp_{c.name}' for c in t.unfinished)}:")
                 elif t.finished: print(f"\t\tif {' and '.join(f'not tmp_{c.name}' for c in t.finished)}:")
                 else: print(f"\t\tif True:")
-                if t.when: print(f"\t\t\tif {' and '.join(f'tmp_{c.lhs.name} {c.kind} tmp_{c.rhs.name}' for c in t.when)}:")
+                if t.when:
+                    temp = []
+                    for c in t.when:
+                        if isinstance(c, Inequality): temp.append(f'tmp_{c.lhs.name} {c.kind} tmp_{c.rhs.name}')
+                        if isinstance(c, OpOrNot): temp.append(f'(tmp_{c.lhs.name} is None or tmp_{c.lhs.name} {c.kind} tmp_{c.rhs.name})')
+                    print(f"\t\t\tif {' and '.join(temp)}:")
                 else: print(f"\t\t\tif True:")
                 for dst, src in t.push: print(f"\t\t\t\t{dst.name}.push(tmp_{src.name})")
                 for src in t.pull: print(f"\t\t\t\ttmp_{src.name} = {src.name}.pull()")
@@ -38,12 +43,18 @@ class Node:
     @classmethod
     def named(cls, g, *args) -> list[Self]: return [cls(g, a) for a in args]
 class Src(Node):
-    def __lt__(self, other: 'Src'): return Cond('<', self, other)
-    def __gt__(self, other: 'Src'): return Cond('>', self, other)
-    def __eq__(self, other: 'Src'): return Cond('==', self, other)
+    def __lt__(self, other: 'Src'): return Inequality('<', self, other)
+    def __gt__(self, other: 'Src'): return Inequality('>', self, other)
+    def __eq__(self, other: 'Src'): return Inequality('==', self, other)
+    def __ge__(self, other: 'Src'): return Inequality('>=', self, other)
+    def __le__(self, other: 'Src'): return Inequality('<=', self, other)
 class Snk(Node): pass
-class Cond:
-    def __init__(self, kind: Literal["=="] | Literal["<"] | Literal[">"], lhs: Src, rhs: Src):
+class Cond: pass
+class Inequality(Cond):
+    def __init__(self, kind: Literal["=="] | Literal["<"] | Literal[">"] | Literal[">="] | Literal["<="], lhs: Src, rhs: Src):
+        self.kind = kind; self.lhs = lhs; self.rhs = rhs
+class OpOrNot(Cond):
+    def __init__(self, kind: Literal["=="] | Literal["<"] | Literal[">"] | Literal[">="] | Literal["<="], lhs: Src, rhs: Src):
         self.kind = kind; self.lhs = lhs; self.rhs = rhs
 class Transition:
     def __init__(self, s_from, s_to, when, push, pull, unfinished, finished):
@@ -109,6 +120,43 @@ def intersection_graph():
     s1.to(s1, a == b, b ==c, push=((r, a), ), pull=(a, b, c), unfinished=(a, b, c))
 
     return g
+
+def ctx2():
+
+    # (a/\c \ d)\/(b/\c \ e)
+
+    g = Graph()
+    a, b, c, d = g.sources('a', 'b', 'c', 'd')
+    r, = g.sinks('r')
+    s0, s1, s11, s15, s19 = g.states('s0', 's1', 's11', 's15', 's19')
+    g.init = s0
+
+    s0.to(s1, pull=(a, b, c, d)) # s0
+
+    s1.to(s1, a < c, b < c, pull=(a, b)) # s2
+    s1.to(s1, a < c, b == c, pull=(a,)) # s3
+    s1.to(s1, a < c, b > c, pull=(a,)) # s4
+    s1.to(s1, a == c, b < c, pull=(b,)) # s5
+    s1.to(s1, a > c, b < c, pull=(b,)) # s8
+    s1.to(s1, a > c, b > c, pull=(c,)) # s10
+    s1.to(s11, a == c, b == c, pull=()) # s6
+    s1.to(s15, a == c, b > c, pull=()) # s7
+    s1.to(s19, a > c, b == c, pull=()) # s9
+
+    s11.to(s11, a > d, b > d, pull=(d,)) # s14
+    s11.to(s1, a == d, b == d, pull=(a, b, c)) # s13
+    s11.to(s1, a < d, b < d, push=((r, a),), pull=(a, b)) # s12
+
+    s15.to(s15, a > d, pull=(d,)) # s18
+    s15.to(s1, a == d, pull=(a,)) # s17
+    s15.to(s1, a < d, push=((r, a),), pull=(a,)) # s16
+
+    s19.to(s19, b > d, pull=(d,)) # s22
+    s19.to(s1, b == d, pull=(b,)) # s21
+    s19.to(s1, b < d, push=((r, b),), pull=(b,)) # s20
+
+    return g
+
 
 class Source:
     def __init__(self, n, s):
