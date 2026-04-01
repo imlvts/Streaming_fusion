@@ -13,14 +13,15 @@ class TestGraphGeneration(unittest.TestCase):
         c = Clause.make({"a", "b", "c", "d"}, {"e", "f"})
 
         g = Graph()
-        s0, s1, s2, s3, s4 = g.states('s0', 's1', 's2', 's3', 's4')
+        s0, s1 = g.states('s0', 's1')
         g.init = s0
 
         ps = g.sources("a", "b", "c", "d")
         ns = g.sources("f", "e")
         s0.to(s1, pull=(*ps, *ns))  # s0
 
-        g = c.make_graph(g, s1, (s2, s3))
+        g = c.make_graph(g, s1)
+        # g.dot()
 
         a = Source('a', {'1', '3', 'A', 'B', 'C'})
         b = Source('b', {'2', '3', 'A', 'B'})
@@ -46,7 +47,7 @@ class TestGraphGeneration(unittest.TestCase):
         c2 = Clause.make({"d"}, {"e"})
 
         g = Graph()
-        s0, s1, s2, s3, s4 = g.states('s0', 's1', 's2', 's3', 's4')
+        s0, s1 = g.states('s0', 's1')
         g.init = s0
 
         ps = g.sources("a", "b", "d")
@@ -55,8 +56,8 @@ class TestGraphGeneration(unittest.TestCase):
 
         dependency = defaultdict(str)
 
-        g = c1.make_graph(g, s1, (s2, s3), dependency)
-        g = c2.make_graph(g, s1, (s4, ), dependency)
+        g = c1.make_graph(g, s1, dependency)
+        g = c2.make_graph(g, s1, dependency)
         # g.py()
 
 
@@ -85,6 +86,7 @@ class TestGraphGeneration(unittest.TestCase):
         except IndexError:
             print("stopped by exhaustion")
 
+        # g.dot()
         self.assertSetEqual(a_set.intersection(b_set).difference(c_set).union(d_set.difference(e_set)), set(r.data))
 
 
@@ -93,15 +95,15 @@ class TestGraphGeneration(unittest.TestCase):
         c2 = Clause.make({"b", "c"}, {"e"})
 
         g = Graph()
-        s0, s1, s2, s3, s4, s5 = g.states('s0', 's1', 's2', 's3', 's4', 's5')
+        s0, s1 = g.states('s0', 's1')
         g.init = s0
 
         a, b, c, d, e = g.sources("a", "b", "c", "d", "e")
         s0.to(s1, pull=(a, b, c, d, e))  # s0
 
         dependencies = defaultdict(tuple[str], {"c": (a, b)})
-        g = c1.make_graph(g, s1, [s2, s3], dependencies)
-        g = c2.make_graph(g, s1, [s4, s5], dependencies)
+        g = c1.make_graph(g, s1, dependencies)
+        g = c2.make_graph(g, s1, dependencies)
         g.py()
 
         # for t in c.make_graph().transitions:
@@ -137,15 +139,15 @@ class TestGraphGeneration(unittest.TestCase):
         c2 = Clause.make({"b", "c"}, {"d"})
 
         g = Graph()
-        s0, s1, s2, s3, s4, s5 = g.states('s0', 's1', 's2', 's3', 's4', 's5')
+        s0, s1 = g.states('s0', 's1')
         g.init = s0
 
         a, b, c, d = g.sources("a", "b", "c", "d")
         s0.to(s1, pull=(a, b, c, d))  # s0
 
         dependencies = defaultdict(tuple[str], {"c": (a, b)})
-        g = c1.make_graph(g, s1, [s2, s3], dependencies)
-        g = c2.make_graph(g, s1, [s4, s5], dependencies)
+        g = c1.make_graph(g, s1, dependencies)
+        g = c2.make_graph(g, s1, dependencies)
         g.py()
 
         # for t in c.make_graph().transitions:
