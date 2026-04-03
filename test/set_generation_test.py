@@ -148,7 +148,7 @@ class TestGraphGeneration(unittest.TestCase):
         dependencies = defaultdict(tuple[str], {"c": (a, b)})
         g = c1.make_graph(g, s1, dependencies)
         g = c2.make_graph(g, s1, dependencies)
-        g.py()
+        g.dot()
 
         # for t in c.make_graph().transitions:
         #     print((t.s_from.name, t.s_to.name, [(w.lhs.name, w.kind, w.rhs.name) for w in t.when], [p.name for r, p in t.push], [p.name for p in t.pull], [u.name for u in t.unfinished]))
@@ -174,3 +174,109 @@ class TestGraphGeneration(unittest.TestCase):
 
         wanted = a_set.intersection(c_set).difference(d_set).union(b_set.intersection(c_set).difference(d_set))
         self.assertSetEqual(wanted, set(r.data))
+
+    def test_random(self):
+        a_set = {'1'}
+        b_set = {'3', '4', 'F'}
+        c_set = {'2', 'C'}
+        d_set = {'1', '2', '7', 'B', 'C'}
+        e_set = {'4'}
+
+        # (1, 3, 2, 1, 4)
+        # (1, 3, 2, 2, 4)
+        # (/, 3, 2, 2, 4)
+
+
+        # c1 = Clause.make({'e'}, {'a'})
+        # c2 = Clause.make({'b', 'd', 'a'}, {'c'})
+        # c3 = Clause.make({'d'}, {'c'})
+
+        c2 = Clause.make({'a', 'b'}, {'c'})
+        c3 = Clause.make({'b'}, {'c'})
+
+
+        # wanted = e_set.union(b_set.intersection(a_set.intersection(d_set)).difference(c_set.union(e_set))).union(d_set.difference(b_set.union(c_set)))
+        # wanted = a_set.intersection(d_set).difference(c_set).union(d_set.difference(c_set))
+        # wanted = a_set.intersection(b_set).difference(c_set).union(b_set.difference(c_set))
+        wanted = c2.eval({"a": a_set, "b": b_set, "c": c_set}) | c3.eval({"a": a_set, "b": b_set, "c": c_set})
+        print("wanted", wanted)
+
+        g = Graph()
+        s0, s1 = g.states('s0', 's1')
+        g.init = s0
+
+        a, b, c, d, e = g.sources("a", "b", "c", "d", "e")
+        s0.to(s1, pull=(a, b, c, d, e))  # s0
+
+        a = Source('a', a_set)
+        b = Source('b', b_set)
+        c = Source('c', c_set)
+        d = Source('d', d_set)
+        e = Source('e', e_set)
+        r = Sink()
+
+        dependencies = defaultdict(tuple[str], {"a": (b, ), "b": (a, ), "c": (a, b)})
+        # g = c1.make_graph(g, s1, dependencies)
+        g = c2.make_graph(g, s1, dependencies)
+        g = c3.make_graph(g, s1, dependencies)
+        g.dot()
+
+
+
+        s = StringIO()
+        with redirect_stdout(s):
+            g.py()
+        try:
+            exec(s.getvalue())
+        except IndexError:
+            print("stopped by exhaustion")
+
+        self.assertSetEqual(wanted, set(r.data))
+
+    def test_singleton(self):
+        a_set = {'1', '4', '5', '6'}
+        b_set = {'2', '4', '5', '6', '7'}
+        c_set = {'3', '5'}
+        d_set = {'5', '6'}
+
+        c1 = Clause.make({'a', 'b'}, {'c'})
+        c2 = Clause.make({'b'}, {'d'})
+
+
+        wanted = (a_set.intersection(b_set).difference(c_set)).union(b_set.difference(d_set))
+        print("wanted", wanted)
+
+        g = Graph()
+        s0, s1 = g.states('s0', 's1')
+        g.init = s0
+
+        a, b, c, d = g.sources("a", "b", "c", "d")
+        s0.to(s1, pull=(a, b, c, d))  # s0
+
+        a = Source('a', a_set)
+        b = Source('b', b_set)
+        c = Source('c', c_set)
+        d = Source('d', d_set)
+        r = Sink()
+
+        dependencies = defaultdict(tuple[str], {"a": (b, ), "b": (a, ), "c": (a, b), "d": (b, )})
+        singletons = {b}
+        # g = c1.make_graph(g, s1, dependencies)
+        g = c1.make_graph(g, s1, dependencies, singletons)
+        g = c2.make_graph(g, s1, dependencies, singletons)
+        g.dot()
+
+
+
+        s = StringIO()
+        with redirect_stdout(s):
+            g.py()
+        try:
+            exec(s.getvalue())
+        except IndexError:
+            print("stopped by exhaustion")
+
+        self.assertSetEqual(wanted, set(r.data))
+
+if __name__ == '__main__':
+    unittest.main()

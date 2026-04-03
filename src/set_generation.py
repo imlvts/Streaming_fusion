@@ -26,7 +26,20 @@ class Clause:
             return f"(({p}) \\ ({n}))"
         return f"({p})"
 
-    def make_graph(self, g: Graph, s_main, dependency=None):
+    def eval(self, env: dict[str, set]) -> set:
+        if not self.P:
+            return set()
+        it = iter(self.P)
+        result = set(env[next(it)])
+        for p in self.P:
+            result &= env[p]
+        for n in self.N:
+            result -= env[n]
+        return result
+
+
+
+    def make_graph(self, g: Graph, s_main, dependency=None, singletons=()):
         if dependency is None:
             dependency = defaultdict(str)
         # (a /\ b) /\ c
@@ -35,24 +48,29 @@ class Clause:
         ns = g.sources(*self.N)
         r, = g.sinks('r')
 
+        p_names = [p.name for p in ps]
+
         # s0, s1, s2 = g.states('s0', 's1', 's2')
         # g.init = s0
 
         # s0.to(s1, pull=(*ps, *ns))  # s0
         for p in ps:
             for q in ps:
-                if p.name != q.name:
-                    s_main.to(s_main, p < q, *(OpOrNot('>', d, p) for d in dependency[p.name]), pull=(p, ), active=ps)
+                if p.name not in [s.name for s in singletons]:
+                    if p.name != q.name:
+                        s_main.to(s_main, p < q, *(OpOrNot('>', d, p) for d in dependency[p.name]), pull=(p, ), active=ps)
 
         for p in ps:
-            s_main.to(s_main, *(ps[0] == q for q in ps), *(OpOrNot('>', d, p) for d in dependency[p.name] if d not in ps), *(OpOrNot('>', n, p) for n in ns), push=((r, p),), pull=(p,), active=ps)
+            print([p_.name for p_ in ps])
+            print(p.name, [d.name for d in dependency[p.name] if d.name not in [p_.name for p_ in ps]])
+            s_main.to(s_main, *(ps[0] == q for q in ps), *(OpOrNot('>', d, p) for d in dependency[p.name] if d.name not in p_names), *(OpOrNot('>', n, p) for n in ns), push=((r, p),), pull=(p,), active=ps)
 
         for p in ps:
             for n in ns:
-                s_main.to(s_main, *(ps[0] == q for q in ps), p == n, *(OpOrNot('>', d, p) for d in dependency[p.name] if d not in ps), pull=(p, ), active=(*ps, n))
+                s_main.to(s_main, *(ps[0] == q for q in ps), p == n, *(OpOrNot('>', d, p) for d in dependency[p.name] if d.name not in p_names), pull=(p, ), active=(*ps, n))
 
         for n in ns:
-            s_main.to(s_main, *(ps[0] == q for q in ps), *(ps[0] != n2 for n2 in ns), ps[0] > n, *(OpOrNot('>', d, n) for d in dependency[n.name] if d not in ps), pull=(n,), active=(*ps, n))
+            s_main.to(s_main, *(ps[0] == q for q in ps), *(ps[0] != n2 for n2 in ns), ps[0] > n, *(OpOrNot('>', d, n) for d in dependency[n.name]), pull=(n,), active=(*ps, n))
 
 
         """
