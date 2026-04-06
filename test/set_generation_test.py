@@ -1,4 +1,5 @@
 import unittest
+import random
 from collections import defaultdict
 from contextlib import redirect_stdout
 from io import StringIO
@@ -9,274 +10,638 @@ from src.synth import Sink, Source, Graph
 
 
 class TestGraphGeneration(unittest.TestCase):
-    def test_clause(self):
-        c = Clause.make({"a", "b", "c", "d"}, {"e", "f"})
 
+    # -------------------------
+    # Pretty printing helpers
+    # -------------------------
+
+    def format_env(self, env: dict[str, set]) -> str:
+        return ", ".join(
+            f"{k}={{{', '.join(sorted(v))}}}"
+            for k, v in sorted(env.items())
+        )
+
+    def repr_env(self, env: dict[str, set]) -> str:
+        lines = ["{"]
+        for name in sorted(env):
+            elems = ", ".join(repr(x) for x in sorted(env[name]))
+            lines.append(f'    "{name}": {{{elems}}},')
+        lines.append("}")
+        return "\n".join(lines)
+
+    # -------------------------
+    # Core reusable runner
+    # -------------------------
+
+    def run_formula_case(
+        self,
+        clauses,
+        env,
+        *,
+        dependency_names=None,
+        singleton_names=None,
+        debug_py=False,
+        debug_dot=False,
+        seed=None,
+        trial=None,
+        case_name=None,
+    ):
+        dependency_names = dependency_names or {}
+        singleton_names = singleton_names or ()
+
+        wanted = set()
+        for clause in clauses:
+            wanted |= clause.eval(env)
+
+        f = Formula(clauses)
         g = Graph()
-        s0, s1 = g.states('s0', 's1')
+        s0, s1, s2 = g.states("s0", "s1", "s2")
         g.init = s0
 
-        ps = g.sources("a", "b", "c", "d")
-        ns = g.sources("f", "e")
-        s0.to(s1, pull=(*ps, *ns))  # s0
+        names = sorted(env.keys())
+        pulled = g.sources(*names)
+        source_map = dict(zip(names, pulled))
 
-        g = c.make_graph(g, s1)
-        # g.dot()
+        s0.to(s1, pull=tuple(pulled))
 
-        a = Source('a', {'1', '3', 'A', 'B', 'C'})
-        b = Source('b', {'2', '3', 'A', 'B'})
-        c = Source('c', {'1', '3', '4', 'A', 'B'})
-        d = Source('d', {'1', '3', 'A', 'B'})
-        e = Source('e', {'1', 'A'})
-        f = Source('f', {'3'})
-        r = Sink()
-        # wanted: 3, B
+        dependencies = defaultdict(tuple)
+        for name, deps in dependency_names.items():
+            dependencies[name] = tuple(source_map[d] for d in deps)
 
-        s = StringIO()
-        with redirect_stdout(s):
-            g.py()
-        try:
-            exec(s.getvalue())
-        except IndexError:
-            print("stopped by exhaustion")
+        # tuple, not set, because Src is unhashable
+        singletons = tuple(source_map[name] for name in singleton_names)
 
-        self.assertEqual(['B'], r.data)
+        # for clause in clauses:
+        #     g = clause.make_graph(g, s1, dependencies, singletons)
+        g = f.make_graph2(g, s1, s2, dependencies)
 
-    def test_two_results_non_overlapping(self):
-        c1 = Clause.make({"a", "b"}, {"c"})
-        c2 = Clause.make({"d"}, {"e"})
+        if debug_dot:
+            g.dot()
 
-        g = Graph()
-        s0, s1 = g.states('s0', 's1')
-        g.init = s0
-
-        ps = g.sources("a", "b", "d")
-        ns = g.sources("c", "e")
-        s0.to(s1, pull=(*ps, *ns))  # s0
-
-        dependency = defaultdict(str)
-
-        g = c1.make_graph(g, s1, dependency)
-        g = c2.make_graph(g, s1, dependency)
-        # g.py()
-
-
-        # for t in c.make_graph().transitions:
-        #     print((t.s_from.name, t.s_to.name, [(w.lhs.name, w.kind, w.rhs.name) for w in t.when], [p.name for r, p in t.push], [p.name for p in t.pull], [u.name for u in t.unfinished]))
-        a_set = {'1', '3', 'A', 'B', 'C'}
-        b_set = {'2', '3', 'A', 'B'}
-        c_set = {'1', '3', '4', 'A', 'B'}
-        d_set = {'1', '3', 'A', 'B'}
-        e_set = {'1', 'A'}
-
-        a = Source('a', {'1', '3', 'A', 'B', 'C'})
-        b = Source('b', {'2', '3', 'A', 'B'})
-        c = Source('c', {'1', '3', '4', 'A', 'B'})
-        d = Source('d', {'1', '3', 'A', 'B'})
-        e = Source('e', {'1', 'A'})
-        f = Source('f', {'3'})
-        r = Sink()
-        # wanted: 3, B
-
-        s = StringIO()
-        with redirect_stdout(s):
-            g.py()
-        try:
-            exec(s.getvalue())
-        except IndexError:
-            print("stopped by exhaustion")
-
-        # g.dot()
-        self.assertSetEqual(a_set.intersection(b_set).difference(c_set).union(d_set.difference(e_set)), set(r.data))
-
-
-    def test_overlapping_intersections(self):
-        c1 = Clause.make({"a", "c"}, {"d"})
-        c2 = Clause.make({"b", "c"}, {"e"})
-
-        g = Graph()
-        s0, s1 = g.states('s0', 's1')
-        g.init = s0
-
-        a, b, c, d, e = g.sources("a", "b", "c", "d", "e")
-        s0.to(s1, pull=(a, b, c, d, e))  # s0
-
-        dependencies = defaultdict(tuple[str], {"c": (a, b)})
-        g = c1.make_graph(g, s1, dependencies)
-        g = c2.make_graph(g, s1, dependencies)
         g.py()
 
-        # for t in c.make_graph().transitions:
-        #     print((t.s_from.name, t.s_to.name, [(w.lhs.name, w.kind, w.rhs.name) for w in t.when], [p.name for r, p in t.push], [p.name for p in t.pull], [u.name for u in t.unfinished]))
-        a_set = {'1', '3', 'A', 'B', 'C'}
-        b_set = {'2', '3', 'A', 'B'}
-        c_set = {'1', '3', '4', 'A', 'B'}
-        d_set = {'1', '3', 'B'}
-        e_set = {'1', 'A'}
-
-        a = Source('a', a_set)
-        b = Source('b', b_set)
-        c = Source('c', c_set)
-        d = Source('d', d_set)
-        e = Source('e', e_set)
-        f = Source('f', {'3'})
-        r = Sink()
+        exec_env = {n: Source(n, env[n]) for n in names}
+        exec_env["r"] = Sink()
 
         s = StringIO()
         with redirect_stdout(s):
             g.py()
+
+        generated_code = s.getvalue()
+
+        if debug_py:
+            print(generated_code)
+
         try:
-            exec(s.getvalue())
+            exec(generated_code, exec_env, exec_env)
         except IndexError:
             print("stopped by exhaustion")
 
-        wanted = a_set.intersection(c_set).difference(d_set).union(b_set.intersection(c_set).difference(e_set))
-        self.assertSetEqual(wanted, set(r.data))
+        actual = set(exec_env["r"].data)
 
+        self.assertSetEqual(
+            wanted,
+            actual,
+            msg=(
+                f"\ncase={case_name}"
+                f"\nseed={seed}"
+                f"\ntrial={trial}"
+                f"\nclauses={clauses}"
+                f"\nenv={self.repr_env(env)}"
+                f"\nwanted={sorted(wanted)}"
+                f"\nactual={sorted(actual)}"
+            ),
+        )
+
+    # -------------------------
+    # Random env helpers
+    # -------------------------
+
+    def random_env(self, variables, universe=None, rng=None):
+        rng = rng or random
+        universe = universe or tuple("123456789ABCDEF")
+
+        return {
+            v: set(rng.sample(universe, rng.randint(0, len(universe))))
+            for v in variables
+        }
+
+    def run_random_envs(
+        self,
+        clauses,
+        *,
+        dependency_names=None,
+        singleton_names=None,
+        variables=None,
+        trials=50,
+        seed=0,
+        case_name=None,
+    ):
+        if variables is None:
+            variables = sorted(set().union(*(c.P | c.N for c in clauses)))
+
+        rng = random.Random(seed)
+
+        for i in range(trials):
+            env = self.random_env(variables, rng=rng)
+
+            with self.subTest(case=case_name, i=i, seed=seed, env=self.format_env(env)):
+                self.run_formula_case(
+                    clauses,
+                    env,
+                    dependency_names=dependency_names,
+                    singleton_names=singleton_names,
+                    seed=seed,
+                    trial=i,
+                    case_name=case_name,
+                )
+
+    # -------------------------
+    # Run one case both ways
+    # -------------------------
+
+    def run_case_with_original_and_random(self, case):
+        name = case["name"]
+        clauses = case["clauses"]
+        env = case["env"]
+        dependency_names = case.get("dependency_names", {})
+        singleton_names = case.get("singleton_names", ())
+        variables = case.get("variables")
+        trials = case.get("trials", 50)
+        seed = case.get("seed", 0)
+
+        with self.subTest(case=name, kind="original"):
+            self.run_formula_case(
+                clauses,
+                env,
+                dependency_names=dependency_names,
+                singleton_names=singleton_names,
+                case_name=name,
+            )
+
+        self.run_random_envs(
+            clauses,
+            dependency_names=dependency_names,
+            singleton_names=singleton_names,
+            variables=variables,
+            trials=trials,
+            seed=seed,
+            case_name=name,
+        )
+
+    # -------------------------
+    # All cases in one place
+    # -------------------------
+
+    CASES = [
+        {
+            "name": "clause",
+            "clauses": [
+                Clause.make({"a", "b", "c", "d"}, {"e", "f"}),
+            ],
+            "env": {
+                "a": {"1", "3", "A", "B", "C"},
+                "b": {"2", "3", "A", "B"},
+                "c": {"1", "3", "4", "A", "B"},
+                "d": {"1", "3", "A", "B"},
+                "e": {"1", "A"},
+                "f": {"3"},
+            },
+            "dependency_names": {
+                "a": ("b", "c", "d", "e", "f"),
+                "b": ("a", "c", "d", "e", "f"),
+                "c": ("a", "b", "d", "e", "f"),
+                "d": ("a", "b", "c", "e", "f"),
+                "e": ("a", "b", "c", "d", "f"),
+                "f": ("a", "b", "c", "d", "e")
+            },
+            "variables": ["a", "b", "c", "d", "e", "f"],
+            "trials": 100,
+            "seed": 10,
+        },
+        {
+            "name": "two_results_non_overlapping",
+            "clauses": [
+                Clause.make({"a", "b"}, {"c"}),
+                Clause.make({"d"}, {"e"}),
+            ],
+            "env": {
+                "a": {"1", "3", "A", "B", "C"},
+                "b": {"2", "3", "A", "B"},
+                "c": {"1", "3", "4", "A", "B"},
+                "d": {"1", "3", "A", "B"},
+                "e": {"1", "A"},
+            },
+            "variables": ["a", "b", "c", "d", "e"],
+            "trials": 100,
+            "seed": 11,
+        },
+        {
+            "name": "overlapping_intersections",
+            "clauses": [
+                Clause.make({"a", "c"}, {"d"}),
+                Clause.make({"b", "c"}, {"e"}),
+            ],
+            "env": {
+                "a": {"1", "3", "A", "B", "C"},
+                "b": {"2", "3", "A", "B"},
+                "c": {"1", "3", "4", "A", "B"},
+                "d": {"1", "3", "B"},
+                "e": {"1", "A"},
+            },
+            "dependency_names": {
+                "c": ("a", "b"),
+            },
+            "variables": ["a", "b", "c", "d", "e"],
+            "trials": 100,
+            "seed": 12,
+        },
+        {
+            "name": "first_formula",
+            "clauses": [
+                Clause.make({"a", "c"}, {"d"}),
+                Clause.make({"b", "c"}, {"d"}),
+            ],
+            "env": {
+                "a": {"1", "B", "C"},
+                "b": {"2", "3", "A"},
+                "c": {"3", "4", "A", "B"},
+                "d": {"1", "A"},
+            },
+            "dependency_names": {
+                "c": ("a", "b"),
+            },
+            "variables": ["a", "b", "c", "d"],
+            "trials": 100,
+            "seed": 13,
+        },
+        {
+            "name": "random_original",
+            "clauses": [
+                Clause.make({"a", "b"}, {"c"}),
+                Clause.make({"b"}, {"c"}),
+            ],
+            "env": {
+                "a": {"1"},
+                "b": {"3", "4", "F"},
+                "c": {"2", "C"},
+                "d": {"1", "2", "7", "B", "C"},
+                "e": {"4"},
+            },
+            "dependency_names": {
+                "a": ("b",),
+                "b": ("a",),
+                "c": ("a", "b"),
+            },
+            "singleton_names": ("b", ),
+            "variables": ["a", "b", "c", "d", "e"],
+            "trials": 100,
+            "seed": 14,
+        },
+        {
+            "name": "singleton",
+            "clauses": [
+                Clause.make({"a", "b"}, {"c"}),
+                Clause.make({"b"}, {"d"}),
+            ],
+            "env": {
+                "a": {"1", "4", "5", "6"},
+                "b": {"2", "4", "5", "6", "7"},
+                "c": {"3", "5"},
+                "d": {"5", "6"},
+            },
+            "dependency_names": {
+                "a": ("b",),
+                "b": ("a",),
+                "c": ("a", "b"),
+                "d": ("b",),
+            },
+            "singleton_names": ("b",),
+            "variables": ["a", "b", "c", "d"],
+            "trials": 100,
+            "seed": 15,
+        },
+    ]
+
+    # -------------------------
+    # One test per formula
+    # -------------------------
+
+    def test_clause(self):
+        self.run_case_with_original_and_random(self.CASES[0])
+
+    def test_two_results_non_overlapping(self):
+        self.run_case_with_original_and_random(self.CASES[1])
+
+    def test_overlapping_intersections(self):
+        self.run_case_with_original_and_random(self.CASES[2])
 
     def test_first_formula(self):
-        c1 = Clause.make({"a", "c"}, {"d"})
-        c2 = Clause.make({"b", "c"}, {"d"})
+        self.run_case_with_original_and_random(self.CASES[3])
 
-        g = Graph()
-        s0, s1 = g.states('s0', 's1')
-        g.init = s0
-
-        a, b, c, d = g.sources("a", "b", "c", "d")
-        s0.to(s1, pull=(a, b, c, d))  # s0
-
-        dependencies = defaultdict(tuple[str], {"c": (a, b)})
-        g = c1.make_graph(g, s1, dependencies)
-        g = c2.make_graph(g, s1, dependencies)
-        g.dot()
-
-        # for t in c.make_graph().transitions:
-        #     print((t.s_from.name, t.s_to.name, [(w.lhs.name, w.kind, w.rhs.name) for w in t.when], [p.name for r, p in t.push], [p.name for p in t.pull], [u.name for u in t.unfinished]))
-        a_set = {'1', 'B', 'C'}
-        b_set = {'2', '3', 'A'}
-        c_set = {'3', '4', 'A', 'B'}
-        d_set = {'1', 'A'}
-
-
-        a = Source('a', {'1', 'B', 'C'})
-        b = Source('b', {'2', '3', 'A'})
-        c = Source('c', {'3', '4', 'A', 'B'})
-        d = Source('d', {'1', 'A'})
-        r = Sink()
-
-        s = StringIO()
-        with redirect_stdout(s):
-            g.py()
-        try:
-            exec(s.getvalue())
-        except IndexError:
-            print("stopped by exhaustion")
-
-        wanted = a_set.intersection(c_set).difference(d_set).union(b_set.intersection(c_set).difference(d_set))
-        self.assertSetEqual(wanted, set(r.data))
-
-    def test_random(self):
-        a_set = {'1'}
-        b_set = {'3', '4', 'F'}
-        c_set = {'2', 'C'}
-        d_set = {'1', '2', '7', 'B', 'C'}
-        e_set = {'4'}
-
-        # (1, 3, 2, 1, 4)
-        # (1, 3, 2, 2, 4)
-        # (/, 3, 2, 2, 4)
-
-
-        # c1 = Clause.make({'e'}, {'a'})
-        # c2 = Clause.make({'b', 'd', 'a'}, {'c'})
-        # c3 = Clause.make({'d'}, {'c'})
-
-        c2 = Clause.make({'a', 'b'}, {'c'})
-        c3 = Clause.make({'b'}, {'c'})
-
-
-        # wanted = e_set.union(b_set.intersection(a_set.intersection(d_set)).difference(c_set.union(e_set))).union(d_set.difference(b_set.union(c_set)))
-        # wanted = a_set.intersection(d_set).difference(c_set).union(d_set.difference(c_set))
-        # wanted = a_set.intersection(b_set).difference(c_set).union(b_set.difference(c_set))
-        wanted = c2.eval({"a": a_set, "b": b_set, "c": c_set}) | c3.eval({"a": a_set, "b": b_set, "c": c_set})
-        print("wanted", wanted)
-
-        g = Graph()
-        s0, s1 = g.states('s0', 's1')
-        g.init = s0
-
-        a, b, c, d, e = g.sources("a", "b", "c", "d", "e")
-        s0.to(s1, pull=(a, b, c, d, e))  # s0
-
-        a = Source('a', a_set)
-        b = Source('b', b_set)
-        c = Source('c', c_set)
-        d = Source('d', d_set)
-        e = Source('e', e_set)
-        r = Sink()
-
-        dependencies = defaultdict(tuple[str], {"a": (b, ), "b": (a, ), "c": (a, b)})
-        # g = c1.make_graph(g, s1, dependencies)
-        g = c2.make_graph(g, s1, dependencies)
-        g = c3.make_graph(g, s1, dependencies)
-        g.dot()
-
-
-
-        s = StringIO()
-        with redirect_stdout(s):
-            g.py()
-        try:
-            exec(s.getvalue())
-        except IndexError:
-            print("stopped by exhaustion")
-
-        self.assertSetEqual(wanted, set(r.data))
+    def test_random_original(self):
+        self.run_case_with_original_and_random(self.CASES[4])
 
     def test_singleton(self):
-        a_set = {'1', '4', '5', '6'}
-        b_set = {'2', '4', '5', '6', '7'}
-        c_set = {'3', '5'}
-        d_set = {'5', '6'}
-
-        c1 = Clause.make({'a', 'b'}, {'c'})
-        c2 = Clause.make({'b'}, {'d'})
+        self.run_case_with_original_and_random(self.CASES[5])
 
 
-        wanted = (a_set.intersection(b_set).difference(c_set)).union(b_set.difference(d_set))
-        print("wanted", wanted)
+class TestNaiveGeneration(unittest.TestCase):
 
-        g = Graph()
-        s0, s1 = g.states('s0', 's1')
-        g.init = s0
+    # -------------------------
+    # Pretty printing helpers
+    # -------------------------
 
-        a, b, c, d = g.sources("a", "b", "c", "d")
-        s0.to(s1, pull=(a, b, c, d))  # s0
+    def format_env(self, env: dict[str, set]) -> str:
+        return ", ".join(
+            f"{k}={{{', '.join(sorted(v))}}}"
+            for k, v in sorted(env.items())
+        )
 
-        a = Source('a', a_set)
-        b = Source('b', b_set)
-        c = Source('c', c_set)
-        d = Source('d', d_set)
-        r = Sink()
+    def repr_env(self, env: dict[str, set]) -> str:
+        lines = ["{"]
+        for name in sorted(env):
+            elems = ", ".join(repr(x) for x in sorted(env[name]))
+            lines.append(f'    "{name}": {{{elems}}},')
+        lines.append("}")
+        return "\n".join(lines)
 
-        dependencies = defaultdict(tuple[str], {"a": (b, ), "b": (a, ), "c": (a, b), "d": (b, )})
-        singletons = {b}
-        # g = c1.make_graph(g, s1, dependencies)
-        g = c1.make_graph(g, s1, dependencies, singletons)
-        g = c2.make_graph(g, s1, dependencies, singletons)
-        g.dot()
+    # -------------------------
+    # Core reusable runner
+    # -------------------------
+
+    def run_formula_case(
+        self,
+        clauses,
+        env,
+        *,
+        dependency_names=None,
+        singleton_names=None,
+        debug_py=False,
+        debug_dot=False,
+        seed=None,
+        trial=None,
+        case_name=None,
+    ):
+        dependency_names = dependency_names or {}
+        singleton_names = singleton_names or ()
+
+        wanted = set()
+        for clause in clauses:
+            wanted |= clause.eval(env)
+
+        f = Formula(clauses)
+
+        actual = set(f.naive(env).data)
+        print()
+
+        self.assertSetEqual(
+            wanted,
+            actual,
+            msg=(
+                f"\ncase={case_name}"
+                f"\nseed={seed}"
+                f"\ntrial={trial}"
+                f"\nclauses={clauses}"
+                f"\nenv={self.repr_env(env)}"
+                f"\nwanted={sorted(wanted)}"
+                f"\nactual={sorted(actual)}"
+            ),
+        )
+
+    # -------------------------
+    # Random env helpers
+    # -------------------------
+
+    def random_env(self, variables, universe=None, rng=None):
+        rng = rng or random
+        universe = universe or tuple("123456789ABCDEF")
+
+        return {
+            v: set(rng.sample(universe, rng.randint(0, len(universe))))
+            for v in variables
+        }
+
+    def run_random_envs(
+        self,
+        clauses,
+        *,
+        dependency_names=None,
+        singleton_names=None,
+        variables=None,
+        trials=50,
+        seed=0,
+        case_name=None,
+    ):
+        if variables is None:
+            variables = sorted(set().union(*(c.P | c.N for c in clauses)))
+
+        rng = random.Random(seed)
+
+        for i in range(trials):
+            env = self.random_env(variables, rng=rng)
+
+            with self.subTest(case=case_name, i=i, seed=seed, env=self.format_env(env)):
+                self.run_formula_case(
+                    clauses,
+                    env,
+                    dependency_names=dependency_names,
+                    singleton_names=singleton_names,
+                    seed=seed,
+                    trial=i,
+                    case_name=case_name,
+                )
+
+    # -------------------------
+    # Run one case both ways
+    # -------------------------
+
+    def run_case_with_original_and_random(self, case):
+        name = case["name"]
+        clauses = case["clauses"]
+        env = case["env"]
+        dependency_names = case.get("dependency_names", {})
+        singleton_names = case.get("singleton_names", ())
+        variables = case.get("variables")
+        trials = case.get("trials", 50)
+        seed = case.get("seed", 0)
+
+        with self.subTest(case=name, kind="original"):
+            self.run_formula_case(
+                clauses,
+                env,
+                dependency_names=dependency_names,
+                singleton_names=singleton_names,
+                case_name=name,
+            )
+
+        self.run_random_envs(
+            clauses,
+            dependency_names=dependency_names,
+            singleton_names=singleton_names,
+            variables=variables,
+            trials=trials,
+            seed=seed,
+            case_name=name,
+        )
+
+    # -------------------------
+    # All cases in one place
+    # -------------------------
+
+    CASES = [
+        {
+            "name": "clause",
+            "clauses": [
+                Clause.make({"a", "b", "c", "d"}, {"e", "f"}),
+            ],
+            "env": {
+                "a": {"1", "3", "A", "B", "C"},
+                "b": {"2", "3", "A", "B"},
+                "c": {"1", "3", "4", "A", "B"},
+                "d": {"1", "3", "A", "B"},
+                "e": {"1", "A"},
+                "f": {"3"},
+            },
+            "dependency_names": {
+                "a": ("b", "c", "d", "e", "f"),
+                "b": ("a", "c", "d", "e", "f"),
+                "c": ("a", "b", "d", "e", "f"),
+                "d": ("a", "b", "c", "e", "f"),
+                "e": ("a", "b", "c", "d", "f"),
+                "f": ("a", "b", "c", "d", "e")
+            },
+            "variables": ["a", "b", "c", "d", "e", "f"],
+            "trials": 100,
+            "seed": 10,
+        },
+        {
+            "name": "two_results_non_overlapping",
+            "clauses": [
+                Clause.make({"a", "b"}, {"c"}),
+                Clause.make({"d"}, {"e"}),
+            ],
+            "env": {
+                "a": {"1", "3", "A", "B", "C"},
+                "b": {"2", "3", "A", "B"},
+                "c": {"1", "3", "4", "A", "B"},
+                "d": {"1", "3", "A", "B"},
+                "e": {"1", "A"},
+            },
+            "variables": ["a", "b", "c", "d", "e"],
+            "trials": 100,
+            "seed": 11,
+        },
+        {
+            "name": "overlapping_intersections",
+            "clauses": [
+                Clause.make({"a", "c"}, {"d"}),
+                Clause.make({"b", "c"}, {"e"}),
+            ],
+            "env": {
+                "a": {"1", "3", "A", "B", "C"},
+                "b": {"2", "3", "A", "B"},
+                "c": {"1", "3", "4", "A", "B"},
+                "d": {"1", "3", "B"},
+                "e": {"1", "A"},
+            },
+            "dependency_names": {
+                "c": ("a", "b"),
+            },
+            "variables": ["a", "b", "c", "d", "e"],
+            "trials": 100,
+            "seed": 12,
+        },
+        {
+            "name": "first_formula",
+            "clauses": [
+                Clause.make({"a", "c"}, {"d"}),
+                Clause.make({"b", "c"}, {"d"}),
+            ],
+            "env": {
+                "a": {"1", "B", "C"},
+                "b": {"2", "3", "A"},
+                "c": {"3", "4", "A", "B"},
+                "d": {"1", "A"},
+            },
+            "dependency_names": {
+                "c": ("a", "b"),
+            },
+            "variables": ["a", "b", "c", "d"],
+            "trials": 100,
+            "seed": 13,
+        },
+        {
+            "name": "random_original",
+            "clauses": [
+                Clause.make({"a", "b"}, {"c"}),
+                Clause.make({"b"}, {"c"}),
+            ],
+            "env": {
+                "a": {"1"},
+                "b": {"3", "4", "F"},
+                "c": {"2", "C"},
+                "d": {"1", "2", "7", "B", "C"},
+                "e": {"4"},
+            },
+            "dependency_names": {
+                "a": ("b",),
+                "b": ("a",),
+                "c": ("a", "b"),
+            },
+            "singleton_names": ("b", ),
+            "variables": ["a", "b", "c", "d", "e"],
+            "trials": 100,
+            "seed": 14,
+        },
+        {
+            "name": "singleton",
+            "clauses": [
+                Clause.make({"a", "b"}, {"c"}),
+                Clause.make({"b"}, {"d"}),
+            ],
+            "env": {
+                "a": {"1", "4", "5", "6"},
+                "b": {"2", "4", "5", "6", "7"},
+                "c": {"3", "5"},
+                "d": {"5", "6"},
+            },
+            "dependency_names": {
+                "a": ("b",),
+                "b": ("a",),
+                "c": ("a", "b"),
+                "d": ("b",),
+            },
+            "singleton_names": ("b",),
+            "variables": ["a", "b", "c", "d"],
+            "trials": 100,
+            "seed": 15,
+        },
+    ]
+
+    # -------------------------
+    # One test per formula
+    # -------------------------
+
+    def test_clause(self):
+        self.run_case_with_original_and_random(self.CASES[0])
+
+    def test_two_results_non_overlapping(self):
+        self.run_case_with_original_and_random(self.CASES[1])
+
+    def test_overlapping_intersections(self):
+        self.run_case_with_original_and_random(self.CASES[2])
+
+    def test_first_formula(self):
+        self.run_case_with_original_and_random(self.CASES[3])
+
+    def test_random_original(self):
+        self.run_case_with_original_and_random(self.CASES[4])
+
+    def test_singleton(self):
+        self.run_case_with_original_and_random(self.CASES[5])
 
 
 
-        s = StringIO()
-        with redirect_stdout(s):
-            g.py()
-        try:
-            exec(s.getvalue())
-        except IndexError:
-            print("stopped by exhaustion")
-
-        self.assertSetEqual(wanted, set(r.data))
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()
