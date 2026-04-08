@@ -198,6 +198,50 @@ class FormulaTestBase(unittest.TestCase, ABC):
 
         # convert plain sets -> bittrieset
         return {v: bittrieset(*paths) for v, paths in env.items()}
+
+    # -------- random clause generation --------
+
+    def random_clause(self, rng, variables, min_pos=1, max_pos=3, min_neg=0, max_neg=2):
+        vars_list = list(variables)
+
+        # positive side
+        p_size = rng.randint(min_pos, min(max_pos, len(vars_list)))
+        P = set(rng.sample(vars_list, p_size))
+
+        # negative side (disjoint from P)
+        remaining = [v for v in vars_list if v not in P]
+        n_size = rng.randint(min_neg, min(max_neg, len(remaining))) if remaining else 0
+        N = set(rng.sample(remaining, n_size))
+
+        return Clause.make(P, N)
+
+
+    def random_clauses(
+        self,
+        rng,
+        *,
+        variable_count=5,
+        clause_count=3,
+        min_pos=1,
+        max_pos=3,
+        min_neg=0,
+        max_neg=2,
+    ):
+        variables = [chr(ord("a") + i) for i in range(variable_count)]
+
+        clauses = [
+            self.random_clause(
+                rng,
+                variables,
+                min_pos=min_pos,
+                max_pos=max_pos,
+                min_neg=min_neg,
+                max_neg=max_neg,
+            )
+            for _ in range(clause_count)
+        ]
+
+        return clauses, variables
     # -------- runners --------
 
     @abstractmethod
@@ -239,6 +283,45 @@ class FormulaTestBase(unittest.TestCase, ABC):
             case_name=name,
         )
 
+    def run_random_formulas(
+            self,
+            *,
+            formula_trials=50,
+            env_trials=20,
+            seed=0,
+            variable_count=5,
+            clause_count=3,
+            min_pos=1,
+            max_pos=3,
+            min_neg=0,
+            max_neg=2,
+            case_name="random_formula",
+    ):
+        rng = random.Random(seed)
+
+        for i in range(formula_trials):
+            clauses, variables = self.random_clauses(
+                rng,
+                variable_count=variable_count,
+                clause_count=clause_count,
+                min_pos=min_pos,
+                max_pos=max_pos,
+                min_neg=min_neg,
+                max_neg=max_neg,
+            )
+
+            for j in range(env_trials):
+                env = self.random_env_for_clauses(clauses, variables, rng)
+
+                with self.subTest(case=case_name, formula_trial=i, env_trial=j):
+                    self.run_formula_case(
+                        clauses,
+                        env,
+                        trial=(i, j),
+                        seed=seed,
+                        case_name=case_name,
+                    )
+
 
 class TestNaiveGeneration(FormulaTestBase):
     def run_formula_case(self, clauses, env, **meta):
@@ -272,6 +355,15 @@ class TestNaiveGeneration(FormulaTestBase):
 
     def test_singleton(self):
         self.run_case_with_original_and_random(self.CASES[5])
+
+    def test_random_formulas(self):
+        self.run_random_formulas(
+            formula_trials=50,
+            env_trials=10,
+            seed=123,
+            variable_count=6,
+            clause_count=4,
+        )
 
 
 if __name__ == "__main__":

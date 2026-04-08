@@ -37,11 +37,20 @@ class TrieExecution:
             if all(v is None for v in values.values()):
                 break
 
-            m = min(
-                (k for k, v in values.items() if v is not None),
-                key=lambda k: values[k].path()
+            # compute minimum path value
+            min_path = min(
+                (v.path() for v in values.values() if v is not None),
             )
-            values[m] = srcs[m].descend_or_next()   #TODO see how much we can skip!
+
+            # get all keys with that minimum
+            mins = [
+                k for k, v in values.items()
+                if v is not None and v.path() == min_path
+            ]
+
+            # update all of them
+            for k in mins:
+                values[k] = srcs[k].descend_or_next()   #TODO see how much we can skip!
 
         return r
 
