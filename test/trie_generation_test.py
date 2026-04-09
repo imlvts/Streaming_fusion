@@ -310,6 +310,8 @@ class FormulaTestBase(unittest.TestCase, ABC):
                 max_neg=max_neg,
             )
 
+            print(clauses)
+
             for j in range(env_trials):
                 env = self.random_env_for_clauses(clauses, variables, rng)
 

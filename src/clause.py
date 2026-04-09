@@ -1,4 +1,7 @@
 from dataclasses import dataclass
+from typing import DefaultDict
+
+from test.fuzzer import Clause
 
 
 @dataclass(frozen=True)
@@ -41,9 +44,41 @@ class Formula:
             result |= c.eval(env)
         return result
 
+    def vars(self):
+        v = set()
+        for c in self.clauses:
+            v |= c.P
+            v |= c.N
+        return v
+
+    def groups(self):
+        dp = DefaultDict()
+        dn = DefaultDict()
+
+        for v in self.vars():
+            pos = {c.P.difference(v) for c in self.clauses if v in c.P}
+            dp[v] = {s for s in pos if s}
+            neg = {c.P.difference(v) for c in self.clauses if v in c.N}
+            dn[v] = {s for s in neg if s}
+        return dp, dn
+
+    def singletons(self):
+        return {v for v in self.vars() if any(len(c.P) == 1 and v in c.P for c in self.clauses)}
+
     def show(self) -> str:
         if not self.clauses:
             return "∅"
         return " ∪ ".join(
             sorted((c.show() for c in self.clauses))
         )
+
+
+if __name__ == '__main__':
+    c1 = Clause.make({"a", "b", "e"}, {"c", "d"})
+    c2 = Clause.make({"c", "b"}, {"a"})
+
+    f = Formula([c1, c2])
+
+    dp, dn = f.groups()
+    print(dp)
+    print(dn)
