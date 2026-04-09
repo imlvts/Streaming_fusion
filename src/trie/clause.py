@@ -10,8 +10,12 @@ class Clause:
     N: frozenset[str]
 
     @staticmethod
-    def make(p, n=()):
-        return Clause(frozenset(p), frozenset(n))
+    def make(P, N):
+        P = frozenset(P)
+        N = frozenset(N)
+        if P & N:
+            raise ValueError(f"inconsistent clause: {P=} {N=}")
+        return Clause(P, N)
 
     def is_empty(self) -> bool:
         return not self.P or bool(self.P & self.N)

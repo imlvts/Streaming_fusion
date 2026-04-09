@@ -15,6 +15,7 @@ class TrieExecution:
             print("ITER", i)
             matched = False
 
+            # check whether there are paths to add to the results
             for c in formula.clauses:
                 ps = list(c.P)
                 if all(values[p] is not None for p in ps):
