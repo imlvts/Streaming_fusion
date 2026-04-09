@@ -1,10 +1,7 @@
 from collections import defaultdict
-from contextlib import redirect_stdout
 from dataclasses import dataclass
-from io import StringIO
-from itertools import product
 
-from src.synth import Graph, Source, Sink, OpOrNot
+from src.set.synth import Graph, Source, Sink, OpOrNot
 
 
 @dataclass(frozen=True)

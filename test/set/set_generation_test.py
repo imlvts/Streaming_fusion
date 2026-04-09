@@ -4,8 +4,8 @@ from collections import defaultdict
 from contextlib import redirect_stdout
 from io import StringIO
 
-from src.set_generation import Formula, Clause
-from src.synth import Sink, Source, Graph
+from src.set.set_generation import Formula, Clause
+from src.set.synth import Sink, Source, Graph
 
 
 

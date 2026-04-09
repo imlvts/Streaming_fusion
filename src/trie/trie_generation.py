@@ -1,6 +1,6 @@
-from src.clause import Clause, Formula
-from src.trie import bittrieset
-from src.trie_synth import Source, Sink
+from src.trie.clause import Clause, Formula
+from src.trie.trie import bittrieset
+from src.trie.trie_synth import Source, Sink
 
 
 class TrieExecution:
@@ -47,9 +47,6 @@ class TrieExecution:
             ]
 
             # update all of them
-
-            temp_values = values
-
             print("next iter")
 
             print("all mins", mins)
@@ -105,7 +102,6 @@ class TrieExecution:
                         values[k] = srcs[k].next(i)
 
                 # print("min", k, temp)
-                # values[k] = srcs[k].descend_or_next()
 
         return r
 

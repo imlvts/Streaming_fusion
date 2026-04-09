@@ -1,4 +1,4 @@
-from src.trie_synth import *
+from src.trie.trie_synth import *
 import unittest
 import random
 

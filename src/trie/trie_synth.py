@@ -1,7 +1,7 @@
 from contextlib import redirect_stdout
 from io import StringIO
 from typing import Self, Literal
-from src.trie import bittrieset, BitTrieMap, TrieRef
+from src.trie.trie import bittrieset, BitTrieMap, TrieRef
 
 
 class Graph:
