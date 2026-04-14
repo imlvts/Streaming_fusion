@@ -4,182 +4,129 @@ from dataclasses import dataclass
 from io import StringIO
 
 from src.set.synth import Graph, Source, Sink, OpOrNot
+from src.clause import Clause, Formula
 
 
-@dataclass(frozen=True)
-class Clause:
-    P: frozenset[str]
-    N: frozenset[str]
+def make_graph(clause, g: Graph, s_main, dependency=None, singletons=(), singleton_nodes=None):
+    # FIXME bugged!!!!
+    if dependency is None:
+        dependency = defaultdict(str)
+    if dependency is None:
+        dependency = defaultdict(str)
+    # (a /\ b) /\ c
+    # g = Graph()
+    ps = g.sources(*clause.P)
+    ns = g.sources(*clause.N)
+    r, = g.sinks('r')
 
-    @staticmethod
-    def make(p, n=()):
-        return Clause(frozenset(p), frozenset(n))
+    p_names = [p.name for p in ps]
 
-    def is_empty(self) -> bool:
-        return not self.P or bool(self.P & self.N)
+    # s0, s1, s2 = g.states('s0', 's1', 's2')
+    # g.init = s0
 
-    def show(self) -> str:
-        p = " ∩ ".join(sorted(self.P)) if self.P else "∅"
-        n = " ∪ ".join(sorted(self.N)) if self.N else "∅"
-        if self.N:
-            return f"(({p}) \\ ({n}))"
-        return f"({p})"
+    # s0.to(s1, pull=(*ps, *ns))  # s0
+    for p in ps:
+        for q in ps:
+            if p.name not in [s.name for s in singletons]:
+                if p.name != q.name:
+                    s_main.to(s_main, p < q, *(OpOrNot('>', d, p) for d in dependency[p.name]), pull=(p, ), active=ps)
 
-    def eval(self, env: dict[str, set]) -> set:
-        if not self.P:
-            return set()
-        it = iter(self.P)
-        result = set(env[next(it)])
-        for p in self.P:
-            result &= env[p]
-        for n in self.N:
-            result -= env[n]
-        return result
+    for p in ps:
+        s_main.to(s_main, *(ps[0] == q for q in ps), *(OpOrNot('>', d, p) for d in dependency[p.name] if d.name not in p_names), *(OpOrNot('>', n, p) for n in ns), push=((r, p),), pull=(p,), active=ps)
+
+    for p in ps:
+        for n in ns:
+            # if p.name in singletons:
+            #     s_main.to(singleton_nodes[p.name], *(ps[0] == q for q in ps), p == n, *(OpOrNot('>', d, p) for d in dependency[p.name] if d.name not in p_names), active=(*ps, n))
+            # else:
+            s_main.to(s_main, *(ps[0] == q for q in ps), p == n, *(OpOrNot('>', d, p) for d in dependency[p.name] if d.name not in p_names), pull=(p, ), active=(*ps, n))
+
+    for n in ns:
+        s_main.to(s_main, *(ps[0] == q for q in ps), *(ps[0] != n2 for n2 in ns), ps[0] > n, *(OpOrNot('>', d, n) for d in dependency[n.name]), pull=(n,), active=(*ps, n))
 
 
-
-    def make_graph(self, g: Graph, s_main, dependency=None, singletons=(), singleton_nodes=None):
-        # FIXME bugged!!!!
-        if dependency is None:
-            dependency = defaultdict(str)
-        if dependency is None:
-            dependency = defaultdict(str)
-        # (a /\ b) /\ c
-        # g = Graph()
-        ps = g.sources(*self.P)
-        ns = g.sources(*self.N)
-        r, = g.sinks('r')
-
-        p_names = [p.name for p in ps]
-
-        # s0, s1, s2 = g.states('s0', 's1', 's2')
-        # g.init = s0
-
-        # s0.to(s1, pull=(*ps, *ns))  # s0
-        for p in ps:
-            for q in ps:
-                if p.name not in [s.name for s in singletons]:
-                    if p.name != q.name:
-                        s_main.to(s_main, p < q, *(OpOrNot('>', d, p) for d in dependency[p.name]), pull=(p, ), active=ps)
-
-        for p in ps:
-            s_main.to(s_main, *(ps[0] == q for q in ps), *(OpOrNot('>', d, p) for d in dependency[p.name] if d.name not in p_names), *(OpOrNot('>', n, p) for n in ns), push=((r, p),), pull=(p,), active=ps)
-
-        for p in ps:
-            for n in ns:
-                # if p.name in singletons:
-                #     s_main.to(singleton_nodes[p.name], *(ps[0] == q for q in ps), p == n, *(OpOrNot('>', d, p) for d in dependency[p.name] if d.name not in p_names), active=(*ps, n))
-                # else:
-                s_main.to(s_main, *(ps[0] == q for q in ps), p == n, *(OpOrNot('>', d, p) for d in dependency[p.name] if d.name not in p_names), pull=(p, ), active=(*ps, n))
+    """
+    for (p, n) in zip(s_news, product(ps, ns)):
+        s_main.to(s_main, *(ps[0] == q for q in ps), *(p <= d for d in dependency[p.name]), active=ps)
 
         for n in ns:
-            s_main.to(s_main, *(ps[0] == q for q in ps), *(ps[0] != n2 for n2 in ns), ps[0] > n, *(OpOrNot('>', d, n) for d in dependency[n.name]), pull=(n,), active=(*ps, n))
+            s_new_.to(s_main, ps[0] == n, pull=(p, ), active=(n,))
+            s_new_.to(s_new_, ps[0] > n, pull=(n,), active=(n,))  # TODO dependency???
 
+        s_new_.to(s_main, *(ps[0] < n for n in ns), push = ((r, ps[0]), ), pull = (p, ), active=ns)
+        # TODO Should I not add a statement for if some are smaller, and some are finished?
+        s_new_.to(s_main, push = ((r, ps[0]), ), pull = (p, ), finished=ns)
+    """
 
-        """
-        for (p, n) in zip(s_news, product(ps, ns)):
-            s_main.to(s_main, *(ps[0] == q for q in ps), *(p <= d for d in dependency[p.name]), active=ps)
+    return g
 
-            for n in ns:
-                s_new_.to(s_main, ps[0] == n, pull=(p, ), active=(n,))
-                s_new_.to(s_new_, ps[0] > n, pull=(n,), active=(n,))  # TODO dependency???
+def naive(formula, env):
+    # FIXME also bugged
+    srcs = {k: Source(k, v) for (k, v) in env.items()}
+    r = Sink()
+    values = {k: s.pull() for (k, s) in srcs.items()}
 
-            s_new_.to(s_main, *(ps[0] < n for n in ns), push = ((r, ps[0]), ), pull = (p, ), active=ns)
-            # TODO Should I not add a statement for if some are smaller, and some are finished?
-            s_new_.to(s_main, push = ((r, ps[0]), ), pull = (p, ), finished=ns)
-        """
+    for i in range(100):
+        matched = False
 
-        return g
+        for c in formula.clauses:
+            ps = list(c.P)
+            if all(values[p] is not None for p in ps):
+                if (
+                        all(values[ps[0]] == values[p] for p in ps)
+                        and all(values[n] > values[ps[0]] for n in c.N if values[n] is not None)
+                ):
+                    r.push(values[ps[0]])
+                    p = ps[0]
+                    values[p] = srcs[p].pull()
+                    matched = True
+                    break
 
+        if matched:
+            continue
 
-class Formula:
-    def __init__(self, clauses):
-        self.clauses = clauses
+        if all(v is None for v in values.values()):
+            break
 
-    def vars(self):
-        v = set()
-        for c in self.clauses:
-            v |= c.P
-            v |= c.N
-        return v
-
-    def eval(self, env: dict[str, set]) -> set:
-        result = self.clauses[0].eval(env)
-        for c in self.clauses:
-            result |= c.eval(env)
-        return result
-
-    def naive(self, env):
-        srcs = {k: Source(k, v) for (k, v) in env.items()}
-        r = Sink()
-        values = {k: s.pull() for (k, s) in srcs.items()}
-
-        for i in range(100):
-            matched = False
-
-            for c in self.clauses:
-                ps = list(c.P)
-                if all(values[p] is not None for p in ps):
-                    if (
-                            all(values[ps[0]] == values[p] for p in ps)
-                            and all(values[n] > values[ps[0]] for n in c.N if values[n] is not None)
-                    ):
-                        r.push(values[ps[0]])
-                        p = ps[0]
-                        values[p] = srcs[p].pull()
-                        matched = True
-                        break
-
-            if matched:
-                continue
-
-            if all(v is None for v in values.values()):
-                break
-
-            m = min(
-                (k for k, v in values.items() if v is not None),
-                key=values.get
-            )
-            values[m] = srcs[m].pull()
-
-        return r
-
-    def graph_generation(self):
-        # to add: if all positives are None, we are done, we don't have to pull the negatives
-        # possible optimization: don't pull negatives until necessary (now they will be pulled when they are smallest)
-        g = Graph()
-        s0, s1, s2 = g.states('s0', 's1', 's2')
-        var_states = {v: g.states(f"s{v}")[0] for v in self.vars()}
-        srcs = {v: g.sources(v)[0] for v in self.vars()}
-
-        g.init = s0
-
-        s0.to(s1, pull=(srcs.values()))
-
-        r, = g.sinks('r')
-
-        for clause in self.clauses:
-            ps = list(clause.P)
-            s1.to(s1, *(srcs[ps[0]] == srcs[q] for q in ps), *(OpOrNot(">=", srcs[v], srcs[ps[0]]) for v in self.vars().difference(ps).difference(clause.N)), *(OpOrNot(">", srcs[n], srcs[ps[0]]) for n in clause.N), active=tuple(srcs[p] for p in ps), push=((r, srcs[ps[0]]), ), pull=tuple(srcs[p] for p in ps))
-
-        s1.to(s2)
-
-        for v in self.vars():
-            s2.to(var_states[v], *(OpOrNot(">=", srcs[v2], srcs[v]) for v2 in self.vars().difference(v)), active=(srcs[v], ))
-            for v2 in self.vars().difference(v):
-                var_states[v].to(var_states[v], srcs[v] == srcs[v2], pull=(srcs[v2], ))
-            var_states[v].to(s1, pull=(srcs[v], ))
-
-        return g
-
-    def show(self) -> str:
-        if not self.clauses:
-            return "∅"
-        return " ∪ ".join(
-            sorted((c.show() for c in self.clauses))
+        m = min(
+            (k for k, v in values.items() if v is not None),
+            key=values.get
         )
+        values[m] = srcs[m].pull()
+
+    return r
+
+def graph_generation(formula):
+    # to add: if all positives are None, we are done, we don't have to pull the negatives
+    # possible optimization: don't pull negatives until necessary (now they will be pulled when they are smallest)
+    g = Graph()
+    s0, s1, s2 = g.states('s0', 's1', 's2')
+    var_states = {v: g.states(f"s{v}")[0] for v in formula.vars()}
+    srcs = {v: g.sources(v)[0] for v in formula.vars()}
+
+    g.init = s0
+
+    s0.to(s1, pull=(srcs.values()))
+
+    r, = g.sinks('r')
+
+    for clause in formula.clauses:
+        ps = list(clause.P)
+        s1.to(s1, *(srcs[ps[0]] == srcs[q] for q in ps), *(OpOrNot(">=", srcs[v], srcs[ps[0]]) for v in formula.vars().difference(ps).difference(clause.N)), *(OpOrNot(">", srcs[n], srcs[ps[0]]) for n in clause.N), active=tuple(srcs[p] for p in ps), push=((r, srcs[ps[0]]), ), pull=tuple(srcs[p] for p in ps))
+
+    s1.to(s2)
+
+    for v in formula.vars():
+        s2.to(var_states[v], *(OpOrNot(">=", srcs[v2], srcs[v]) for v2 in formula.vars().difference(v)), active=(srcs[v], ))
+        for v2 in formula.vars().difference(v):
+            var_states[v].to(var_states[v], srcs[v] == srcs[v2], pull=(srcs[v2], ))
+        var_states[v].to(s1, pull=(srcs[v], ))
+
+    return g
 
 
+
+"""
 def graph_generation(formula):
     # to add: if all positives are None, we are done, we don't have to pull the negatives
     # possible optimization: don't pull negatives until necessary (now they will be pulled when they are smallest)
@@ -210,15 +157,15 @@ def graph_generation(formula):
         var_states[v].to(s1, pull=(srcs[v],))
 
     return g
-
-
+"""
+"""
 def show(self) -> str:
     if not self.clauses:
         return "∅"
     return " ∪ ".join(
         sorted((c.show() for c in self.clauses))
     )
-
+"""
 
 if __name__ == '__main__':
     """
@@ -281,7 +228,7 @@ if __name__ == '__main__':
     }
     formula = Formula(clauses)
 
-    g = formula.graph_generation()
+    g = graph_generation(formula)
     a = Source('a', env["a"])
     b = Source('b', env["b"])
     c = Source('c', env["c"])

@@ -3,7 +3,7 @@ import unittest
 from contextlib import redirect_stdout
 from io import StringIO
 
-from src.expr import Var, normalize
+from src.normalize import normalize
 from src.set.set_generation import Formula, graph_generation
 from src.set.synth import Source, Sink
 from test.random_generator import rand_expr, random_env
@@ -110,15 +110,6 @@ class MyTestCase(unittest.TestCase):
 
 
 
-    def test_something(self):
-        a, b, c, d = map(Var, "abcd")
-
-        rng = random.Random(42)
-
-        for _ in range(5):
-            expr = rand_expr(rng, ["a", "b", "c", "d"], depth=3)
-            print(expr)
-        self.assertEqual(True, True)  # add assertion here
 
 
 if __name__ == '__main__':

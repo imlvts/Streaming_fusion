@@ -5,7 +5,7 @@ from collections import defaultdict
 from contextlib import redirect_stdout
 from io import StringIO
 
-from src.set.set_generation import Formula, Clause
+from src.set.set_generation import Formula, Clause, graph_generation, naive
 from src.set.synth import Sink, Source, Graph
 
 
@@ -485,7 +485,7 @@ class TestNaiveGeneration(FormulaTestBase):
         case_name=None,
     ):
         wanted = self.expected_result(clauses, env)
-        actual = set(Formula(clauses).naive(env).data)
+        actual = set(naive(Formula(clauses), env).data)
 
         self.assert_formula_result(
             wanted=wanted,
@@ -545,7 +545,7 @@ class TestGraphGeneration2(FormulaTestBase):
         wanted = self.expected_result(clauses, env)
 
         f = Formula(clauses)
-        g = f.graph_generation()
+        g = graph_generation(f)
 
         names = sorted(f.vars())
         srcs = g.sources(*names)
