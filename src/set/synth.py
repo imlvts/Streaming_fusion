@@ -31,6 +31,8 @@ class Graph:
                     print(f"\t\t\tif {' and '.join(temp)}:")
                 else: print(f"\t\t\tif True:")
                 for dst, src in t.push: print(f"\t\t\t\t{dst.name}.push(tmp_{src.name})")
+                # print(p for p in t.pull)
+                # for src in t.pull: print(f"yeeeeeeeeeehya")
                 for src in t.pull: print(f"\t\t\t\ttmp_{src.name} = {src.name}.pull()")
                 print(f"\t\t\t\tstate = '{t.s_to.name}'")
                 print(f"\t\t\t\tcontinue")
@@ -65,15 +67,16 @@ class Src(Node):
     def __lt__(self, other: 'Src'): return Inequality('<', self, other)
     def __gt__(self, other: 'Src'): return Inequality('>', self, other)
     def __eq__(self, other: 'Src'): return Inequality('==', self, other)
+    def __ne__(self, other: 'Src'): return Inequality('!=', self, other)
     def __ge__(self, other: 'Src'): return Inequality('>=', self, other)
     def __le__(self, other: 'Src'): return Inequality('<=', self, other)
 class Snk(Node): pass
 class Cond: pass
 class Inequality(Cond):
-    def __init__(self, kind: Literal["=="] | Literal["<"] | Literal[">"] | Literal[">="] | Literal["<="], lhs: Src, rhs: Src):
+    def __init__(self, kind: Literal["=="] | Literal["<"] | Literal[">"] | Literal[">="] | Literal["<="] | Literal["!="], lhs: Src, rhs: Src):
         self.kind = kind; self.lhs = lhs; self.rhs = rhs
 class OpOrNot(Cond):
-    def __init__(self, kind: Literal["=="] | Literal["<"] | Literal[">"] | Literal[">="] | Literal["<="], lhs: Src, rhs: Src):
+    def __init__(self, kind: Literal["=="] | Literal["<"] | Literal[">"] | Literal[">="] | Literal["<="] | Literal["!="], lhs: Src, rhs: Src):
         self.kind = kind; self.lhs = lhs; self.rhs = rhs
 class Transition:
     def __init__(self, s_from, s_to, when, push, pull, active, finished):

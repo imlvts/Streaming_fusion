@@ -1,5 +1,7 @@
 from collections import defaultdict
+from contextlib import redirect_stdout
 from dataclasses import dataclass
+from io import StringIO
 
 from src.set.synth import Graph, Source, Sink, OpOrNot
 
@@ -94,6 +96,13 @@ class Formula:
     def __init__(self, clauses):
         self.clauses = clauses
 
+    def vars(self):
+        v = set()
+        for c in self.clauses:
+            v |= c.P
+            v |= c.N
+        return v
+
     def naive(self, env):
         srcs = {k: Source(k, v) for (k, v) in env.items()}
         r = Sink()
@@ -129,6 +138,35 @@ class Formula:
 
         return r
 
+    def graph_generation(self):
+        # to add: if all positives are None, we are done, we don't have to pull the negatives
+        # possible optimization: don't pull negatives until necessary (now they will be pulled when they are smallest)
+        g = Graph()
+        s0, s1, s2 = g.states('s0', 's1', 's2')
+        var_states = {v: g.states(f"s{v}")[0] for v in self.vars()}
+        srcs = {v: g.sources(v)[0] for v in self.vars()}
+
+        g.init = s0
+
+        s0.to(s1, pull=(srcs.values()))
+
+        r, = g.sinks('r')
+
+        for clause in self.clauses:
+            ps = list(clause.P)
+            # can be simplified such that vars in clause.N get < instead of <= and !=
+            s1.to(s1, *(srcs[ps[0]] == srcs[q] for q in ps), *(OpOrNot(">=", srcs[v], srcs[ps[0]]) for v in self.vars().difference(ps)), *(OpOrNot("!=", srcs[ps[0]], srcs[n]) for n in clause.N), active=tuple(srcs[p] for p in ps), push=((r, srcs[ps[0]]), ), pull=tuple(srcs[p] for p in ps))
+
+        s1.to(s2)
+
+        for v in self.vars():
+            s2.to(var_states[v], *(OpOrNot(">=", srcs[v2], srcs[v]) for v2 in self.vars()), active=(srcs[v], ))
+            for v2 in self.vars().difference(v):
+                var_states[v].to(var_states[v], srcs[v] == srcs[v2], pull=(srcs[v2], ))
+            var_states[v].to(s1, pull=(srcs[v], ))
+
+        return g
+
     def show(self) -> str:
         if not self.clauses:
             return "∅"
@@ -137,10 +175,11 @@ class Formula:
         )
 
 if __name__ == '__main__':
-    c1 = Clause.make({"a", "b"}, {"c"})
-    c2 = Clause.make({"b"}, {"d"})
+    c1 = Clause.make({"a", "c"}, {"d"})
+    c2 = Clause.make({"b", "c"}, {"d"})
 
     f = Formula((c1, c2))
+    g = f.graph_generation()
     #
     #
     # g = Graph()
@@ -182,24 +221,26 @@ if __name__ == '__main__':
         "d": {'8', 'E'},
     }
     #
-    # a = Source('a', env["a"])
-    # b = Source('b', env["b"])
-    # c = Source('c', env["c"])
-    # d = Source('d', env["d"])
+    a = Source('a', env["a"])
+    b = Source('b', env["b"])
+    c = Source('c', env["c"])
+    d = Source('d', env["d"])
     # # e = Source('e', e_set)
     # # f = Source('f', {'3'})
-    # r = Sink()
+    r = Sink()
     # # wanted: 3, B
     #
     #
-    # s = StringIO()
-    # with redirect_stdout(s):
-    #     g.py()
-    # try:
-    #     exec(s.getvalue())
-    # except IndexError:
-    #     print("stopped by exhaustion")
+    s = StringIO()
+    with redirect_stdout(s):
+        g.py()
+    try:
+        exec(s.getvalue())
+    except IndexError:
+        print("stopped by exhaustion")
 
-    # print("result", set(r.data))
-    print(f.naive(env).data)
+    print("result", set(r.data))
+    # f.graph_generation()
+
+    # print(f.naive(env).data)
     print("wanted", c1.eval(env) | c2.eval(env))
