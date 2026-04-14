@@ -154,13 +154,12 @@ class Formula:
 
         for clause in self.clauses:
             ps = list(clause.P)
-            # can be simplified such that vars in clause.N get < instead of <= and !=
-            s1.to(s1, *(srcs[ps[0]] == srcs[q] for q in ps), *(OpOrNot(">=", srcs[v], srcs[ps[0]]) for v in self.vars().difference(ps)), *(OpOrNot("!=", srcs[ps[0]], srcs[n]) for n in clause.N), active=tuple(srcs[p] for p in ps), push=((r, srcs[ps[0]]), ), pull=tuple(srcs[p] for p in ps))
+            s1.to(s1, *(srcs[ps[0]] == srcs[q] for q in ps), *(OpOrNot(">=", srcs[v], srcs[ps[0]]) for v in self.vars().difference(ps).difference(clause.N)), *(OpOrNot(">", srcs[n], srcs[ps[0]]) for n in clause.N), active=tuple(srcs[p] for p in ps), push=((r, srcs[ps[0]]), ), pull=tuple(srcs[p] for p in ps))
 
         s1.to(s2)
 
         for v in self.vars():
-            s2.to(var_states[v], *(OpOrNot(">=", srcs[v2], srcs[v]) for v2 in self.vars()), active=(srcs[v], ))
+            s2.to(var_states[v], *(OpOrNot(">=", srcs[v2], srcs[v]) for v2 in self.vars().difference(v)), active=(srcs[v], ))
             for v2 in self.vars().difference(v):
                 var_states[v].to(var_states[v], srcs[v] == srcs[v2], pull=(srcs[v2], ))
             var_states[v].to(s1, pull=(srcs[v], ))
@@ -180,6 +179,7 @@ if __name__ == '__main__':
 
     f = Formula((c1, c2))
     g = f.graph_generation()
+    g.dot()
     #
     #
     # g = Graph()
