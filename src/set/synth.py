@@ -13,7 +13,7 @@ class Graph:
         for src in self.srcs:
             print(f"tmp_{src.name} = None")
         print(f"state = '{self.init.name}'")
-        print("for i in range(100):")
+        print("for i in range(500):")
         print('\tprint("state", state)')
         # print('\tprint("temps", tmp_a, tmp_b, tmp_c, tmp_d)')
         for state in self.vtcs:

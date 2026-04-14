@@ -103,6 +103,12 @@ class Formula:
             v |= c.N
         return v
 
+    def eval(self, env: dict[str, set]) -> set:
+        result = self.clauses[0].eval(env)
+        for c in self.clauses:
+            result |= c.eval(env)
+        return result
+
     def naive(self, env):
         srcs = {k: Source(k, v) for (k, v) in env.items()}
         r = Sink()
@@ -173,7 +179,49 @@ class Formula:
             sorted((c.show() for c in self.clauses))
         )
 
+
+def graph_generation(formula):
+    # to add: if all positives are None, we are done, we don't have to pull the negatives
+    # possible optimization: don't pull negatives until necessary (now they will be pulled when they are smallest)
+    g = Graph()
+    s0, s1, s2 = g.states('s0', 's1', 's2')
+    var_states = {v: g.states(f"s{v}")[0] for v in formula.vars()}
+    srcs = {v: g.sources(v)[0] for v in formula.vars()}
+
+    g.init = s0
+
+    s0.to(s1, pull=(srcs.values()))
+
+    r, = g.sinks('r')
+
+    for clause in formula.clauses:
+        ps = list(clause.P)
+        s1.to(s1, *(srcs[ps[0]] == srcs[q] for q in ps),
+              *(OpOrNot(">=", srcs[v], srcs[ps[0]]) for v in formula.vars().difference(ps).difference(clause.N)),
+              *(OpOrNot(">", srcs[n], srcs[ps[0]]) for n in clause.N), active=tuple(srcs[p] for p in ps),
+              push=((r, srcs[ps[0]]),), pull=tuple(srcs[p] for p in ps))
+
+    s1.to(s2)
+
+    for v in formula.vars():
+        s2.to(var_states[v], *(OpOrNot(">=", srcs[v2], srcs[v]) for v2 in formula.vars().difference(v)), active=(srcs[v],))
+        for v2 in formula.vars().difference(v):
+            var_states[v].to(var_states[v], srcs[v] == srcs[v2], pull=(srcs[v2],))
+        var_states[v].to(s1, pull=(srcs[v],))
+
+    return g
+
+
+def show(self) -> str:
+    if not self.clauses:
+        return "∅"
+    return " ∪ ".join(
+        sorted((c.show() for c in self.clauses))
+    )
+
+
 if __name__ == '__main__':
+    """
     c1 = Clause.make({"a", "c"}, {"d"})
     c2 = Clause.make({"b", "c"}, {"d"})
 
@@ -221,16 +269,31 @@ if __name__ == '__main__':
         "d": {'8', 'E'},
     }
     #
+    """
+    clauses = [Clause(P=frozenset({'f'}), N=frozenset()), Clause(P=frozenset({'c', 'b', 'e'}), N=frozenset({'a', 'd'}))]
+    env = {
+        "a": {'1', '2', '3', '4', '5', '6', '7', '8', 'A', 'B', 'C', 'D', 'E', 'F'},
+        "b": {'2', '3', '6', '7', '8', '9', 'B', 'C', 'E'},
+        "c": {'1', '2', '3', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'},
+        "d": {'1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'},
+        "e": {'1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'D', 'E', 'F'},
+        "f": {'1', '2', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'},
+    }
+    formula = Formula(clauses)
+
+    g = formula.graph_generation()
     a = Source('a', env["a"])
     b = Source('b', env["b"])
     c = Source('c', env["c"])
     d = Source('d', env["d"])
-    # # e = Source('e', e_set)
-    # # f = Source('f', {'3'})
+    e = Source('e', env["e"])
+    f = Source('f', env["f"])
     r = Sink()
     # # wanted: 3, B
     #
     #
+    g.py()
+
     s = StringIO()
     with redirect_stdout(s):
         g.py()
@@ -243,4 +306,5 @@ if __name__ == '__main__':
     # f.graph_generation()
 
     # print(f.naive(env).data)
-    print("wanted", c1.eval(env) | c2.eval(env))
+
+    print("wanted", formula.eval(env))
