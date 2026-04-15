@@ -99,11 +99,14 @@ def naive(formula, env):
 
 def graph_generation(formula: DNF):
     # to add: if all positives are None, we are done, we don't have to pull the negatives
-    # possible optimization: don't pull negatives until necessary (now they will be pulled when they are smallest)
     g = Graph()
     s0, s1, s2 = g.states('s0', 's1', 's2')
     var_states = {v: g.states(f"s{v}")[0] for v in formula.vars()}
+    clause_states = {e: g.states(f"sc{e}")[0] for e, c in enumerate(formula.clauses)}
     srcs = {v: g.sources(v)[0] for v in formula.vars()}
+
+    pos_vars = {v for c in formula.clauses for v in c.P}
+    only_neg_vars = formula.vars().difference(pos_vars)
 
     g.init = s0
 
@@ -111,15 +114,20 @@ def graph_generation(formula: DNF):
 
     r, = g.sinks('r')
 
-    for clause in formula.clauses:
+    for e, clause in enumerate(formula.clauses):
         ps = list(clause.P)
-        s1.to(s1, *(srcs[ps[0]] == srcs[q] for q in ps), *(OpOrNot(">=", srcs[v], srcs[ps[0]]) for v in formula.vars().difference(ps).difference(clause.N)), *(OpOrNot(">", srcs[n], srcs[ps[0]]) for n in clause.N), active=tuple(srcs[p] for p in ps), push=((r, srcs[ps[0]]), ), pull=tuple(srcs[p] for p in ps))
+        # s1.to(s1, *(srcs[ps[0]] == srcs[q] for q in ps), *(OpOrNot(">=", srcs[v], srcs[ps[0]]) for v in formula.vars().difference(ps).difference(clause.N)), *(OpOrNot(">", srcs[n], srcs[ps[0]]) for n in clause.N), active=tuple(srcs[p] for p in ps), push=((r, srcs[ps[0]]), ), pull=tuple(srcs[p] for p in ps))
+        s1.to(clause_states[e], *(srcs[ps[0]] == srcs[q] for q in ps), *(OpOrNot(">=", srcs[v], srcs[ps[0]]) for v in pos_vars.difference(ps)), *(srcs[ps[0]] != srcs[n] for n in clause.N), active=tuple(srcs[p] for p in ps))
+        clause_states[e].to(s1, *(OpOrNot(">", srcs[n], srcs[ps[0]]) for n in clause.N), push=((r, srcs[ps[0]]), ), pull=tuple(srcs[p] for p in ps))
+        for n in clause.N:
+            clause_states[e].to(clause_states[e], srcs[n] < srcs[ps[0]], active=(srcs[n], ), pull=(srcs[n], ))
+            clause_states[e].to(s1, srcs[n] == srcs[ps[0]], active=(srcs[n], ))
 
     s1.to(s2)
 
-    for v in formula.vars():
-        s2.to(var_states[v], *(OpOrNot(">=", srcs[v2], srcs[v]) for v2 in formula.vars().difference(v)), active=(srcs[v], ))
-        for v2 in formula.vars().difference(v):
+    for v in pos_vars:
+        s2.to(var_states[v], *(OpOrNot(">=", srcs[v2], srcs[v]) for v2 in pos_vars.difference(v)), active=(srcs[v], ))
+        for v2 in pos_vars.difference(v):
             var_states[v].to(var_states[v], srcs[v] == srcs[v2], pull=(srcs[v2], ))
         var_states[v].to(s1, pull=(srcs[v], ))
 
@@ -177,36 +185,27 @@ if __name__ == '__main__':
     }
     #
     """
-    clauses = [Clause(P=frozenset({'c'}), N=frozenset()), Clause(P=frozenset({'c', 'a'}), N=frozenset()),
-               Clause(P=frozenset({'e', 'f'}), N=frozenset({'c'})), Clause(P=frozenset({'b'}), N=frozenset())]
-    clauses = [Clause(P=frozenset({'e', 'f', 'c'}), N=frozenset({'d'})),
-               Clause(P=frozenset({'b', 'c'}), N=frozenset({'a'})),
-               Clause(P=frozenset({'e', 'c', 'f'}), N=frozenset({'b', 'a'})),
-               Clause(P=frozenset({'c', 'f', 'a'}), N=frozenset({'e'}))]
+    clauses = [Clause(P=frozenset({'a', 'b'}), N=frozenset({'c'})), Clause(P=frozenset({'b'}), N=frozenset())]
     env = {
-        "a": {'1', '2', '3', '4', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'},
-        "b": {'1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'E', 'F'},
-        "c": {'1', '3', '4', '8', 'B', 'C', 'E'},
-        "d": {'1', '3', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'},
-        "e": {'2'},
-        "f": {'1', '8', '9', 'A'},
+        "a": {'8'},
+        "b": {'1', '5', 'F'},
+        "c": {'1', '2', '3', '4', '5', '6', '7', '8', 'A', 'B', 'C', 'D', 'E', 'F'},
     }
-    # wanted = ['1', '8']
-    # actual = ['1', '3', '4', '8', 'B', 'C', 'E']
     formula = DNF(clauses)
 
     g = graph_generation(formula)
     a = Source('a', env["a"])
     b = Source('b', env["b"])
     c = Source('c', env["c"])
-    d = Source('d', env["d"])
-    e = Source('e', env["e"])
-    f = Source('f', env["f"])
+    # d = Source('d', env["d"])
+    # e = Source('e', env["e"])
+    # f = Source('f', env["f"])
     r = Sink()
     # # wanted: 3, B
     #
     #
     g.py()
+    # g.dot(formula.show())
 
     s = StringIO()
     with redirect_stdout(s):
