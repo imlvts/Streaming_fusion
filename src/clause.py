@@ -91,18 +91,10 @@ class DNF:
 
     def simplify(self) -> "DNF":
         """
-        Simplify a union of clauses.
-
-        Repeatedly:
         1. Drop empty clauses.
-        2. Drop clauses redundant by subsumption:
-               c ⊆ d  =>  c is redundant in a union
-           where
-               (P1 \\ N1) ⊆ (P2 \\ N2)  iff  P1 ⊇ P2 and N1 ⊇ N2
-        3. Absorb negatives using pure positive clauses:
-               (D) ∪ ((P) \\ (D ∪ N)) = (D) ∪ ((P) \\ N)
-           more generally, if a clause d has d.N = ∅, then d.P may be removed
-           from the negative side of every other clause.
+        2. Drop clauses redundant because another clause contains them.
+        3. Absorb negatives only using singleton positive clauses:
+               (a) ∪ ((P) \\ (a ∪ N)) = (a) ∪ ((P) \\ N)
         """
         clauses = set(self.clauses)
         changed = True
@@ -133,15 +125,17 @@ class DNF:
                 changed = True
                 clauses = reduced
 
-            # 3. Absorb negatives via pure positive clauses
-            positive_clauses = [c for c in clauses if not c.N]
+            # 3. Safe absorption:
+            # only singleton positive clauses like (a)
+            singleton_positives = {
+                next(iter(c.P))
+                for c in clauses
+                if not c.N and len(c.P) == 1
+            }
 
             absorbed = set()
             for c in clauses:
-                newN = set(c.N)
-                for d in positive_clauses:
-                    if c != d:
-                        newN -= d.P
+                newN = c.N - singleton_positives
                 new_c = Clause.make(c.P, newN)
                 absorbed.add(new_c)
 
