@@ -4,7 +4,8 @@ from contextlib import redirect_stdout
 from io import StringIO
 
 from src.normalize import normalize
-from src.set.set_generation import Formula, graph_generation
+from src.clause import Formula
+from src.set.set_generation import graph_generation
 from src.set.synth import Source, Sink
 from test.random_generator import rand_expr, random_env
 
@@ -107,9 +108,6 @@ class MyTestCase(unittest.TestCase):
             variable_count=6,
             depth=3,
         )
-
-
-
 
 
 if __name__ == '__main__':

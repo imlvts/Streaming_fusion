@@ -217,15 +217,22 @@ if __name__ == '__main__':
     }
     #
     """
-    clauses = [Clause(P=frozenset({'f'}), N=frozenset()), Clause(P=frozenset({'c', 'b', 'e'}), N=frozenset({'a', 'd'}))]
+    clauses = [Clause(P=frozenset({'c'}), N=frozenset()), Clause(P=frozenset({'c', 'a'}), N=frozenset()),
+               Clause(P=frozenset({'e', 'f'}), N=frozenset({'c'})), Clause(P=frozenset({'b'}), N=frozenset())]
+    clauses = [Clause(P=frozenset({'e', 'f', 'c'}), N=frozenset({'d'})),
+               Clause(P=frozenset({'b', 'c'}), N=frozenset({'a'})),
+               Clause(P=frozenset({'e', 'c', 'f'}), N=frozenset({'b', 'a'})),
+               Clause(P=frozenset({'c', 'f', 'a'}), N=frozenset({'e'}))]
     env = {
-        "a": {'1', '2', '3', '4', '5', '6', '7', '8', 'A', 'B', 'C', 'D', 'E', 'F'},
-        "b": {'2', '3', '6', '7', '8', '9', 'B', 'C', 'E'},
-        "c": {'1', '2', '3', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'},
-        "d": {'1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'},
-        "e": {'1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'D', 'E', 'F'},
-        "f": {'1', '2', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'},
+        "a": {'1', '2', '3', '4', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'},
+        "b": {'1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'E', 'F'},
+        "c": {'1', '3', '4', '8', 'B', 'C', 'E'},
+        "d": {'1', '3', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'},
+        "e": {'2'},
+        "f": {'1', '8', '9', 'A'},
     }
+    # wanted = ['1', '8']
+    # actual = ['1', '3', '4', '8', 'B', 'C', 'E']
     formula = Formula(clauses)
 
     g = graph_generation(formula)

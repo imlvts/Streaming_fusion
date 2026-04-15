@@ -5,7 +5,8 @@ from collections import defaultdict
 from contextlib import redirect_stdout
 from io import StringIO
 
-from src.set.set_generation import Formula, Clause, graph_generation, naive
+from src.clause import Formula, Clause
+from src.set.set_generation import graph_generation, naive
 from src.set.synth import Sink, Source, Graph
 
 

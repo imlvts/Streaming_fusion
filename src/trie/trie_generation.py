@@ -1,6 +1,6 @@
-from src.trie.clause import Clause, Formula
+from src.clause import Clause, Formula
 from src.trie.trie import bittrieset
-from src.trie.trie_synth import Source, Sink
+from src.trie.trie_synth import *
 
 
 class TrieExecution:
@@ -106,6 +106,39 @@ class TrieExecution:
 
         return r
 
+    @staticmethod
+    def create_graph(formula):
+        g = Graph()
+        s0, s1 = g.states('s0', 's1')
+
+
+    """
+    @staticmethod
+    def create_graph(formula):
+        g = Graph()
+        srcs = {v : g.sources(v)[0] for v in formula.vars()}
+        s0 = g.states('s0')
+        states = g.states('s1', 's2', 's3', 's4', 's5', 's6', 's7', 's8', 's9', 's10', 's11', 's12',"s15")
+
+        g.init = s0
+
+        s0.to(states[0], descend=(srcs.values()))
+
+        r, = g.sinks('r')
+
+        for e, c in enumerate(formula.clauses):
+            ps = list(c.P)
+            states[e].to(states[e + 1], *(NotFinished(p) for p in c.P), *(ps[0] == p for p in ps), *(IsValue(p) for p in ps))
+
+        if (
+                all(values[ps[0]].path() == values[p].path() for p in ps)
+                and all(values[p].is_value() for p in ps)
+                and all(values[n].path() > values[ps[0]].path() or (
+                values[n].path() == values[ps[0]].path() and not values[n].is_value()) for n in c.N if
+                        values[n] is not None)
+        )
+    """
+
 
 if __name__ == '__main__':
     """
@@ -140,6 +173,10 @@ if __name__ == '__main__':
 
 
     f = Formula(clauses)
+
+    TrieExecution.create_graph(f)
+
+    """
     env = {k: bittrieset(*[e[0] for e in v]) for k, v in env.items()}
 
     wanted = f.eval(env)
@@ -149,4 +186,5 @@ if __name__ == '__main__':
     print(f.show())
     print("found", set(r.data))
     print("wanted", wanted)
+    """
 

@@ -2,7 +2,7 @@ import random
 import unittest
 from abc import ABC, abstractmethod
 
-from src.trie.clause import Clause, Formula
+from src.clause import Clause, Formula
 from src.trie.trie import bittrieset
 from src.trie.trie_generation import TrieExecution
 

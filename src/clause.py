@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from typing import DefaultDict, Iterable
 
+from src.trie.trie import bittriemap, BitTrieMap
+
 
 def _to_frozenset(xs: Iterable[str] | str) -> frozenset[str]:
     if isinstance(xs, str):
@@ -21,7 +23,11 @@ class Clause:
 
     @staticmethod
     def make(P: Iterable[str] | str, N: Iterable[str] | str = ()) -> "Clause":
-        return Clause(_to_frozenset(P), _to_frozenset(N))
+        P = _to_frozenset(P)
+        N = _to_frozenset(N)
+        # if P & N:
+        #     raise ValueError(f"inconsistent clause: {P=} {N=}")
+        return Clause(P, N)
 
     def is_empty(self) -> bool:
         return not self.P or bool(self.P & self.N)
@@ -37,7 +43,9 @@ class Clause:
         if not self.P:
             return set()
         it = iter(self.P)
-        result = set(env[next(it)])
+        result = env[next(it)]
+        if not isinstance(result, BitTrieMap):
+            result = set(result)
         for p in self.P:
             result &= env[p]
         for n in self.N:
@@ -142,3 +150,17 @@ class Formula:
                 clauses = absorbed
 
         return Formula(frozenset(clauses))
+
+    def groups(self):
+        dp = DefaultDict()
+        dn = DefaultDict()
+
+        for v in self.vars():
+            pos = {c.P.difference(v) for c in self.clauses if v in c.P}
+            dp[v] = {s for s in pos if s}
+            neg = {c.P.difference(v) for c in self.clauses if v in c.N}
+            dn[v] = {s for s in neg if s}
+        return dp, dn
+
+    def singletons(self):
+        return {v for v in self.vars() if any(len(c.P) == 1 and v in c.P for c in self.clauses)}
