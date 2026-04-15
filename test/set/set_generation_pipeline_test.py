@@ -94,7 +94,8 @@ class MyTestCase(unittest.TestCase):
                         trial=(i, j),
                         case_name=case_name,
                     )
-                print(expr)
+                print(expr.show())
+                print(formula.show())
                 print(wanted)
                 print(result)
                 self.assertSetEqual(wanted, result)

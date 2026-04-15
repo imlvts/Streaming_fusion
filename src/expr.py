@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from abc import abstractmethod
 from dataclasses import dataclass
 
 @dataclass(frozen=True)
@@ -24,12 +25,16 @@ class Expr:
             return self.left.eval(env) - self.right.eval(env)
         raise TypeError(f"Unknown expr: {self!r}")
 
+    @abstractmethod
+    def show(self):
+        pass
+
 
 @dataclass(frozen=True)
 class Var(Expr):
     name: str
 
-    def __repr__(self):
+    def show(self):
         return self.name
 
 
@@ -38,8 +43,8 @@ class And(Expr):
     left: Expr
     right: Expr
 
-    def __repr__(self):
-        return f"({self.left} & {self.right})"
+    def show(self):
+        return f"({self.left.show()} ∩ {self.right.show()})"
 
 
 @dataclass(frozen=True)
@@ -47,8 +52,8 @@ class Or(Expr):
     left: Expr
     right: Expr
 
-    def __repr__(self):
-        return f"({self.left} | {self.right})"
+    def show(self):
+        return f"({self.left.show()} ∪ {self.right.show()})"
 
 
 @dataclass(frozen=True)
@@ -56,5 +61,11 @@ class Diff(Expr):
     left: Expr
     right: Expr
 
-    def __repr__(self):
-        return f"({self.left} - {self.right})"
+    def show(self):
+        return f"({self.left.show()} \\ {self.right.show()})"
+
+
+if __name__ == '__main__':
+    a, b, c = map(Var, "abc")
+    expr = (a|b) - c
+    print(expr.show())
