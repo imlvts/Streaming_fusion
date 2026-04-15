@@ -38,7 +38,10 @@ class Graph:
                 print(f"\t\t\t\tcontinue")
             print("\t\tprint(state, 'not continued!')")
             print("\t\tbreak")
-    def dot(self):
+    def dot(self, title=None):
+        if title:
+            title = title.replace("\\", "\\\\")
+            print(f"title [shape=\"rect\", label=\"{title}\"]")
         label_index = 0
         for state in self.vtcs:
             print(state.name, ";")
@@ -59,6 +62,7 @@ class Graph:
             temp = [f"{' \\n '.join(cond)}", f"{' \\n '.join(todo)}"]
             label = f"{{{' | '.join(temp)}}}"
             label = label.replace('>', '\\>')
+            label = label.replace('<', '\\<')
             print(f"l{label_index} [shape=\"record\", label=\"{label}\"];")
             print(f"{t.s_from.name} -> l{label_index} [arrowhead=\"none\"];")
             print(f"l{label_index} -> {t.s_to.name};")
