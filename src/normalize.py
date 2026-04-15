@@ -5,7 +5,7 @@ from typing import Iterable
 
 import re
 
-from src.clause import Formula, Clause
+from src.clause import DNF, Clause
 from src.expr import Var, Expr, And, Diff, Or
 
 
@@ -27,7 +27,7 @@ def _clause_sort_key(c: Clause):
 # Core normalization
 # ============================================================
 
-def normalize(expr: Expr) -> Formula:
+def normalize(expr: Expr) -> DNF:
     """
     Convert any Expr built from Var, And, Or, Diff
     into difference-DNF:
@@ -35,12 +35,12 @@ def normalize(expr: Expr) -> Formula:
         ⋃_r (⋂P_r \\ ⋃N_r)
     """
     if isinstance(expr, Var):
-        return Formula.make([Clause.make([expr.name])])
+        return DNF.make([Clause.make([expr.name])])
 
     if isinstance(expr, Or):
         left = normalize(expr.left)
         right = normalize(expr.right)
-        return Formula.make(left.clauses | right.clauses)
+        return DNF.make(left.clauses | right.clauses)
 
     if isinstance(expr, And):
         left = normalize(expr.left)
@@ -55,7 +55,7 @@ def normalize(expr: Expr) -> Formula:
     raise TypeError(f"Unknown Expr: {expr!r}")
 
 
-def and_formulas(f1: Formula, f2: Formula) -> Formula:
+def and_formulas(f1: DNF, f2: DNF) -> DNF:
     """
     Distribute intersection over unions:
         (⋃ c_i) ∩ (⋃ d_j) = ⋃ (c_i ∩ d_j)
@@ -70,10 +70,10 @@ def and_formulas(f1: Formula, f2: Formula) -> Formula:
             c = Clause.make(c1.P | c2.P, c1.N | c2.N)
             if not c.is_empty():
                 out.append(c)
-    return Formula.make(out)
+    return DNF.make(out)
 
 
-def diff_formulas(f1: Formula, f2: Formula) -> Formula:
+def diff_formulas(f1: DNF, f2: DNF) -> DNF:
     """
     Use:
         X \\ (Y ∪ Z) = (X \\ Y) \\ Z
@@ -86,7 +86,7 @@ def diff_formulas(f1: Formula, f2: Formula) -> Formula:
     return current
 
 
-def diff_formula_by_clause(f: Formula, rhs: Clause) -> Formula:
+def diff_formula_by_clause(f: DNF, rhs: Clause) -> DNF:
     """
     Subtract one clause from a formula:
         (⋃ c_i) \\ rhs = ⋃ (c_i \\ rhs)
@@ -94,7 +94,7 @@ def diff_formula_by_clause(f: Formula, rhs: Clause) -> Formula:
     out: list[Clause] = []
     for lhs in f.clauses:
         out.extend(diff_clause_by_clause(lhs, rhs))
-    return Formula.make(out)
+    return DNF.make(out)
 
 
 def diff_clause_by_clause(lhs: Clause, rhs: Clause) -> list[Clause]:
@@ -258,7 +258,7 @@ def parse_expr(s: str) -> Expr:
 # Convenience API
 # ============================================================
 
-def rewrite_to_normal_form(s: str) -> Formula:
+def rewrite_to_normal_form(s: str) -> DNF:
     expr = parse_expr(s)
     return normalize(expr)
 

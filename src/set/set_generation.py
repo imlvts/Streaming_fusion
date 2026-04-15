@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from io import StringIO
 
 from src.set.synth import Graph, Source, Sink, OpOrNot
-from src.clause import Clause, Formula
+from src.clause import Clause, DNF
 
 """
 def make_graph(clause, g: Graph, s_main, dependency=None, singletons=(), singleton_nodes=None):
@@ -97,7 +97,7 @@ def naive(formula, env):
     return r
 """
 
-def graph_generation(formula):
+def graph_generation(formula: DNF):
     # to add: if all positives are None, we are done, we don't have to pull the negatives
     # possible optimization: don't pull negatives until necessary (now they will be pulled when they are smallest)
     g = Graph()
@@ -193,7 +193,7 @@ if __name__ == '__main__':
     }
     # wanted = ['1', '8']
     # actual = ['1', '3', '4', '8', 'B', 'C', 'E']
-    formula = Formula(clauses)
+    formula = DNF(clauses)
 
     g = graph_generation(formula)
     a = Source('a', env["a"])

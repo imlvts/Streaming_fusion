@@ -2,7 +2,7 @@ import random
 import unittest
 from abc import ABC, abstractmethod
 
-from src.clause import Clause, Formula
+from src.clause import Clause, DNF
 from src.trie.trie import bittrieset
 from src.trie.trie_generation import TrieExecution
 
@@ -327,10 +327,10 @@ class FormulaTestBase(unittest.TestCase, ABC):
 
 class TestNaiveGeneration(FormulaTestBase):
     def run_formula_case(self, clauses, env, **meta):
-        formula = Formula(clauses)
+        formula = DNF(clauses)
         wanted = set(formula.eval(env).keys_iterator())
         print(wanted)
-        actual = set(TrieExecution.naive(Formula(clauses), env).data)
+        actual = set(TrieExecution.naive(DNF(clauses), env).data)
 
         self.assert_formula_result(
             wanted=wanted,

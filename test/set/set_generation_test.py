@@ -5,7 +5,7 @@ from collections import defaultdict
 from contextlib import redirect_stdout
 from io import StringIO
 
-from src.clause import Formula, Clause
+from src.clause import DNF, Clause
 from src.set.set_generation import graph_generation #, naive
 from src.set.synth import Sink, Source, Graph
 
@@ -545,7 +545,7 @@ class TestGraphGeneration2(FormulaTestBase):
 
         wanted = self.expected_result(clauses, env)
 
-        f = Formula(clauses)
+        f = DNF(clauses)
         g = graph_generation(f)
 
         names = sorted(f.vars())

@@ -61,13 +61,13 @@ def _clause_subset(c1: Clause, c2: Clause) -> bool:
     """
     return c1.P.issuperset(c2.P) and c1.N.issuperset(c2.N)
 
-class Formula:
+class DNF:
     def __init__(self, clauses):
         self.clauses = clauses
 
     @staticmethod
-    def make(clauses: Iterable[Clause]) -> "Formula":
-        return Formula(frozenset(clauses)).simplify()
+    def make(clauses: Iterable[Clause]) -> "DNF":
+        return DNF(frozenset(clauses)).simplify()
 
     def vars(self):
         v = set()
@@ -89,7 +89,7 @@ class Formula:
             sorted((c.show() for c in self.clauses))
         )
 
-    def simplify(self) -> "Formula":
+    def simplify(self) -> "DNF":
         """
         Simplify a union of clauses.
 
@@ -149,7 +149,7 @@ class Formula:
                 changed = True
                 clauses = absorbed
 
-        return Formula(frozenset(clauses))
+        return DNF(frozenset(clauses))
 
     def groups(self):
         dp = DefaultDict()

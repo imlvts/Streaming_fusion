@@ -1,4 +1,4 @@
-from src.clause import Clause, Formula
+from src.clause import Clause, DNF
 from src.trie.trie import bittrieset
 from src.trie.trie_synth import *
 
@@ -167,7 +167,7 @@ if __name__ == '__main__':
     }
 
 
-    f = Formula(clauses)
+    f = DNF(clauses)
 
     TrieExecution.create_graph(f)
 

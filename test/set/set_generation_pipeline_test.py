@@ -4,7 +4,7 @@ from contextlib import redirect_stdout
 from io import StringIO
 
 from src.normalize import normalize
-from src.clause import Formula
+from src.clause import DNF
 from src.set.set_generation import graph_generation
 from src.set.synth import Source, Sink
 from test.random_generator import rand_expr, random_env
