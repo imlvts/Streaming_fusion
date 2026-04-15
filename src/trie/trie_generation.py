@@ -106,11 +106,6 @@ class TrieExecution:
 
         return r
 
-    @staticmethod
-    def create_graph(formula):
-        g = Graph()
-        s0, s1 = g.states('s0', 's1')
-
 
     """
     @staticmethod

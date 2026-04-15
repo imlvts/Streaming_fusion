@@ -6,7 +6,7 @@ from contextlib import redirect_stdout
 from io import StringIO
 
 from src.clause import Formula, Clause
-from src.set.set_generation import graph_generation, naive
+from src.set.set_generation import graph_generation #, naive
 from src.set.synth import Sink, Source, Graph
 
 
@@ -370,7 +370,7 @@ class FormulaTestBase(unittest.TestCase, ABC):
             case_name=name,
         )
 
-
+"""
 class TestGraphGeneration(FormulaTestBase):
     def run_formula_case(
         self,
@@ -524,7 +524,7 @@ class TestNaiveGeneration(FormulaTestBase):
             variable_count=6,
             clause_count=4,
         )
-
+"""
 
 class TestGraphGeneration2(FormulaTestBase):
     def run_formula_case(

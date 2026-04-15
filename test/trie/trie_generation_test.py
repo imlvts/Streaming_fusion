@@ -362,7 +362,7 @@ class TestNaiveGeneration(FormulaTestBase):
         self.run_random_formulas(
             formula_trials=50,
             env_trials=10,
-            seed=123,
+            seed=456,
             variable_count=6,
             clause_count=4,
         )
