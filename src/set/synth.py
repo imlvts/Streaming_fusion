@@ -43,18 +43,23 @@ class Graph:
         for state in self.vtcs:
             print(state.name, ";")
         for t in self.transitions:
-            temp = []
-            for src in t.active: temp.append(f"active {src.name}")
-            for src in t.finished: temp.append(f"finished {src.name}")
+            cond = []
+            todo = []
+            for src in t.active: cond.append(f"active {src.name}")
+            for src in t.finished: cond.append(f"finished {src.name}")
             if t.when:
                 for c in t.when:
-                    if isinstance(c, Inequality): temp.append(f'{c.lhs.name} {c.kind} {c.rhs.name}')
-                    if isinstance(c, OpOrNot): temp.append(f'({c.lhs.name} is None or {c.lhs.name} {c.kind} {c.rhs.name})')
+                    if isinstance(c, Inequality): cond.append(f'{c.lhs.name} {c.kind} {c.rhs.name}')
+                    if isinstance(c, OpOrNot): cond.append(f'({c.lhs.name} is None or {c.lhs.name} {c.kind} {c.rhs.name})')
 
-            for dst, src in t.push: temp.append(f"{dst.name}!{src.name}")
-            for src in t.pull: temp.append(f"{src.name}.pull()")
-            label = f"{' \\n '.join(temp)}"
-            print(f"l{label_index} [shape=\"rect\", label=\"{label}\"];")
+            for dst, src in t.push: todo.append(f"{dst.name}!{src.name}")
+            for src in t.pull: todo.append(f"{src.name}.pull()")
+            if len(cond) == 0:
+                cond = ["else"]
+            temp = [f"{' \\n '.join(cond)}", f"{' \\n '.join(todo)}"]
+            label = f"{{{' | '.join(temp)}}}"
+            label = label.replace('>', '\\>')
+            print(f"l{label_index} [shape=\"record\", label=\"{label}\"];")
             print(f"{t.s_from.name} -> l{label_index} [arrowhead=\"none\"];")
             print(f"l{label_index} -> {t.s_to.name};")
             label_index += 1
