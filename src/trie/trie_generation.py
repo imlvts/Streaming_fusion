@@ -1,5 +1,5 @@
 from src.clause import Clause, DNF
-from src.trie.trie import bittrieset
+from src.trie.trie import bittrieset, bittriemap
 from src.trie.trie_synth import *
 
 
@@ -106,33 +106,49 @@ class TrieExecution:
 
         return r
 
-
-    """
     @staticmethod
-    def create_graph(formula):
+    def create_state_machine(formula: DNF):
+        # to add: if all positives are None, we are done, we don't have to pull the negatives
         g = Graph()
-        srcs = {v : g.sources(v)[0] for v in formula.vars()}
-        s0 = g.states('s0')
-        states = g.states('s1', 's2', 's3', 's4', 's5', 's6', 's7', 's8', 's9', 's10', 's11', 's12',"s15")
+        s0, s1, s2 = g.states('s0', 's1', 's2')
+        var_states = {v: g.states(f"s{v}")[0] for v in formula.vars()}
+        clause_states = {e: g.states(f"sc{e}")[0] for e, c in enumerate(formula.clauses)}
+        srcs = {v: g.sources(v)[0] for v in formula.vars()}
+
+        pos_vars = {v for c in formula.clauses for v in c.P}
 
         g.init = s0
 
-        s0.to(states[0], descend=(srcs.values()))
+        s0.to(s1, descend=(srcs.values()))
 
         r, = g.sinks('r')
 
-        for e, c in enumerate(formula.clauses):
-            ps = list(c.P)
-            states[e].to(states[e + 1], *(NotFinished(p) for p in c.P), *(ps[0] == p for p in ps), *(IsValue(p) for p in ps))
+        for e, clause in enumerate(formula.clauses):
+            ps = list(clause.P)
+            # s1.to(s1, *(srcs[ps[0]] == srcs[q] for q in ps), *(OpOrNot(">=", srcs[v], srcs[ps[0]]) for v in formula.vars().difference(ps).difference(clause.N)), *(OpOrNot(">", srcs[n], srcs[ps[0]]) for n in clause.N), active=tuple(srcs[p] for p in ps), push=((r, srcs[ps[0]]), ), pull=tuple(srcs[p] for p in ps))
+            s1.to(clause_states[e],
+                  *(IsValue(srcs[p]) for p in ps),
+                  *(srcs[ps[0]] == srcs[q] for q in ps),
+                  *(OpOrNot(">=", srcs[v], srcs[ps[0]]) for v in pos_vars.difference(ps)),
+                  *(NEIfValue("!=", srcs[n], srcs[ps[0]]) for n in clause.N), active=tuple(srcs[p] for p in ps))
+            # n is None or n > ps or (n == ps and not n.IsValue)
+            clause_states[e].to(s2, *(OpOrEqNotValue(">", srcs[n], srcs[ps[0]]) for n in clause.N), push=((r, srcs[ps[0]]),))
+                                # descend=tuple(srcs[p] for p in ps))
+            for n in clause.N:
+                clause_states[e].to(clause_states[e], srcs[n] < srcs[ps[0]], active=(srcs[n],), descend=(srcs[n],))
+                clause_states[e].to(s1, IsValue(srcs[n]), srcs[n] == srcs[ps[0]], active=(srcs[n],))
+                # clause_states[e].to(s1, NotValue(srcs[n]), srcs[n] == srcs[ps[0]], active=(srcs[n],))
 
-        if (
-                all(values[ps[0]].path() == values[p].path() for p in ps)
-                and all(values[p].is_value() for p in ps)
-                and all(values[n].path() > values[ps[0]].path() or (
-                values[n].path() == values[ps[0]].path() and not values[n].is_value()) for n in c.N if
-                        values[n] is not None)
-        )
-    """
+        s1.to(s2)
+
+        for v in pos_vars:
+            s2.to(var_states[v], *(OpOrNot(">=", srcs[v2], srcs[v]) for v2 in pos_vars.difference(v)),
+                  active=(srcs[v],))
+            for v2 in pos_vars.difference(v):
+                var_states[v].to(var_states[v], srcs[v] == srcs[v2], active=(srcs[v2], ), descend=(srcs[v2],))
+            var_states[v].to(s1, descend=(srcs[v],))
+
+        return g
 
 
 if __name__ == '__main__':
@@ -157,29 +173,52 @@ if __name__ == '__main__':
     }
     """
 
-    clauses = [Clause(P=frozenset({'a', 'b'}), N=frozenset({'d'})), Clause(P=frozenset({'d', 'c'}), N=frozenset({'a'}))]
+    clauses = [Clause(P=frozenset({'a', 'b'}), N=frozenset({'c'})), Clause(P=frozenset({'d'}), N=frozenset({'e'}))]
     env = {
-        "a": {('0001', None), ('00010', None), ('000111', None), ('011', None), ('0111', None), ('101', None),
-              ('101010', None)},
-        "b": {('000111', None), ('101010', None)},
-        "c": {('0100', None), ('100000', None), ('101010', None), ('1011', None), ('1110', None)},
-        "d": {('101010', None)},
+        "a": {('001', None), ('0010', None), ('0100', None), ('01001', None), ('111', None)},
+        "b": {('001', None), ('01', None), ('0100', None), ('010111', None), ('11', None), ('110', None),
+              ('111', None)},
+        "c": {('000', None), ('01111', None), ('10', None), ('101000', None)},
+        "d": {('0010', None), ('0011', None), ('010', None), ('0100', None), ('1111', None)},
+        "e": {},
     }
+    # wanted = ['001', '0010', '0011', '010', '0100', '111', '1111']
+    # actual = ['001', '0010', '0011', '010', '0100', '0100', '111', '1111']
 
+
+    env_ = {k: bittrieset(*{s[0] for s in v}) for k, v in env.items()}
+    a = Source('a', env_["a"])
+    b = Source('b', env_["b"])
+    c = Source('c', env_["c"])
+    d = Source('d', env_["d"])
+    e = Source('e', env_["e"])
+
+    r = Sink()
 
     f = DNF(clauses)
+    # f = DNF([Clause({"a", "b", "c", "d"}, {"e", "f"})])
 
-    TrieExecution.create_graph(f)
+    g = TrieExecution.create_state_machine(f)
+    # g.dot()
+    g.py()
 
-    """
+
+
     env = {k: bittrieset(*[e[0] for e in v]) for k, v in env.items()}
 
-    wanted = f.eval(env)
+    wanted: BitTrieMap = f.eval(env)
 
-    r = TrieExecution.naive(f, env)
+    # r = TrieExecution.naive(f, env)
+    s = StringIO()
+    with redirect_stdout(s):
+        g.py()
+    try:
+        exec(s.getvalue())
+    except IndexError:
+        print("stopped by exhaustion")
+
 
     print(f.show())
-    print("found", set(r.data))
-    print("wanted", wanted)
-    """
+    print("wanted", list(wanted.keys_iterator()))
+    print("found", r.data)
 

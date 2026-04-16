@@ -1,10 +1,13 @@
 import random
 import unittest
 from abc import ABC, abstractmethod
+from contextlib import redirect_stdout
+from io import StringIO
 
 from src.clause import Clause, DNF
 from src.trie.trie import bittrieset
 from src.trie.trie_generation import TrieExecution
+from src.trie.trie_synth import Source, Sink
 
 CASES = [
     {
@@ -157,7 +160,7 @@ class FormulaTestBase(unittest.TestCase, ABC):
 
 
     def assert_formula_result(self, *, wanted, actual, clauses, env, **meta):
-        self.assertSetEqual(
+        self.assertEqual(
             wanted,
             actual,
             msg=(
@@ -365,6 +368,73 @@ class TestNaiveGeneration(FormulaTestBase):
             seed=456,
             variable_count=6,
             clause_count=4,
+        )
+
+class TestStateMachineGeneration(FormulaTestBase):
+    def run_formula_case(self, clauses, env, **meta):
+        formula = DNF(clauses)
+        wanted = list(formula.eval(env).keys_iterator())
+        print(wanted)
+
+        g = TrieExecution.create_state_machine(formula)
+
+        names = sorted(formula.vars())
+        srcs = g.sources(*names)
+        source_map = dict(zip(names, srcs))
+
+        exec_env = {n: Source(n, env[n]) for n in names}
+        exec_env["r"] = Sink()
+
+        print(g.py())
+
+        s = StringIO()
+        with redirect_stdout(s):
+            g.py()
+
+        generated_code = s.getvalue()
+
+        try:
+            exec(generated_code, exec_env, exec_env)
+        except IndexError:
+            print("stopped by exhaustion")
+
+        actual = exec_env["r"].data
+
+        # actual = set(TrieExecution.naive(DNF(clauses), env).data)
+
+        self.assert_formula_result(
+            wanted=wanted,
+            actual=actual,
+            clauses=clauses,
+            env=env,
+            **meta,
+        )
+
+    def test_clause(self):
+        self.run_case_with_original_and_random(self.CASES[0])
+
+    def test_two_results_non_overlapping(self):
+        self.run_case_with_original_and_random(self.CASES[1])
+
+    def test_overlapping_intersections(self):
+        self.run_case_with_original_and_random(self.CASES[2])
+
+    def test_first_formula(self):
+        self.run_case_with_original_and_random(self.CASES[3])
+
+    def test_random_original(self):
+        self.run_case_with_original_and_random(self.CASES[4])
+
+    def test_singleton(self):
+        self.run_case_with_original_and_random(self.CASES[5])
+
+    def test_random_formulas(self):
+        self.run_random_formulas(
+            formula_trials=50,
+            env_trials=10,
+            seed=456,
+            variable_count=6,
+            clause_count=3,
         )
 
 
