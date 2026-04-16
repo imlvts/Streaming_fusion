@@ -19,32 +19,79 @@ class Graph:
             print(f"\tif state == '{state.name}':")
             for t in self.transitions:
                 if t.s_from != state: continue
+                if t.active: print(f"\t\tif {' and '.join(f'tmp_{c.name}' for c in t.active)}:")
+                else: print(f"\t\tif True:")
                 if t.when:
                     temp = []
                     all_vars = []
                     for c in t.when:
                         if isinstance(c, Inequality): temp.append(f'tmp_{c.lhs.name}.path() {c.kind} tmp_{c.rhs.name}.path()')
+                        if isinstance(c, OpOrNot): temp.append(
+                            f'(tmp_{c.lhs.name} is None or tmp_{c.lhs.name}.path() {c.kind} tmp_{c.rhs.name}.path())')
+                        if isinstance(c, NEIfValue): temp.append(
+                            f'(tmp_{c.lhs.name} is None or (tmp_{c.lhs.name}.path() {c.kind} tmp_{c.rhs.name}.path() or not tmp_{c.lhs.name}.is_value()))')
+                        if isinstance(c, OpOrEqNotValue): temp.append(
+                            f'(tmp_{c.lhs.name} is None '
+                            f'or tmp_{c.lhs.name}.path() {c.kind} tmp_{c.rhs.name}.path() '
+                            f'or (tmp_{c.lhs.name}.path() == tmp_{c.rhs.name}.path() and not tmp_{c.lhs.name}.is_value()))')
                         if isinstance(c, IsValue): temp.append(f'tmp_{c.lhs.name}.is_value()')
                         if isinstance(c, NotValue): temp.append(f'not tmp_{c.lhs.name}.is_value()')
                         if isinstance(c, PrefixOf): temp.append(f'tmp_{c.lhs.name}.prefix_of(tmp_{c.rhs.name})')
                         if isinstance(c, NotPrefixOf): temp.append(f'not tmp_{c.lhs.name}.prefix_of(tmp_{c.rhs.name})')
                         if isinstance(c, Finished): temp.append(f'tmp_{c.lhs.name} is None')
                         if isinstance(c, NotFinished): temp.append(f'tmp_{c.lhs.name}')
-                    print(f"\t\tif {' and '.join(temp)}:")
-                else: print(f"\t\tif True:")
-                for dst, src in t.push: print(f"\t\t\t{dst.name}.push(tmp_{src.name}.path())")
-                for src in t.descend: print(f"\t\t\ttmp_{src.name} = {src.name}.descend_or_next()")
+                    print(f"\t\t\tif {' and '.join(temp)}:")
+                else: print(f"\t\t\tif True:")
+                for dst, src in t.push: print(f"\t\t\t\t{dst.name}.push(tmp_{src.name}.path())")
+                for src in t.descend: print(f"\t\t\t\ttmp_{src.name} = {src.name}.descend_or_next()")
                 for src, ds in t.next_i:
                     if len(ds) > 1:
                         lvls = [f"{src.name}.difference_level({rhs.name})" for rhs in ds]
-                        print(f"\t\t\ttmp_{src.name} = {src.name}.next(max({', '.join(lvls)}))")
-                    else: print(f"\t\t\ttmp_{src.name} = {src.name}.next({src.name}.difference_level({ds[0].name}))")
-                print(f"\t\t\tstate = '{t.s_to.name}'")
-                print(f"\t\t\tcontinue")
+                        print(f"\t\t\t\ttmp_{src.name} = {src.name}.next(max({', '.join(lvls)}))")
+                    else: print(f"\t\t\t\ttmp_{src.name} = {src.name}.next({src.name}.difference_level({ds[0].name}))")
+                print(f"\t\t\t\tstate = '{t.s_to.name}'")
+                print(f"\t\t\t\tcontinue")
             # print("\t\tprint(state, 'not continued!')")
             print("\t\tbreak")
-    def dot(self):
-        ...
+    def dot(self, title=None):
+        if title:
+            title = title.replace("\\", "\\\\")
+            print(f"title [shape=\"rect\", label=\"{title}\"]")
+        label_index = 0
+        for state in self.vtcs:
+            print(state.name, ";")
+        for t in self.transitions:
+            cond = []
+            todo = []
+            for src in t.active: cond.append(f"active {src.name}")
+            # for src in t.finished: cond.append(f"finished {src.name}")
+            if t.when:
+                for c in t.when:
+                    if isinstance(c, Inequality): cond.append(f'{c.lhs.name} {c.kind} {c.rhs.name}')
+                    if isinstance(c, OpOrNot): cond.append(
+                        f'({c.lhs.name} is None or {c.lhs.name} {c.kind} {c.rhs.name})')
+                    if isinstance(c, NEIfValue): cond.append(
+                        f'({c.lhs.name} is None or ({c.lhs.name}.path() {c.kind} {c.rhs.name}.path() or not {c.lhs.name}.is_value()))')
+                    if isinstance(c, IsValue): cond.append(f'{c.lhs.name}.is_value()')
+                    if isinstance(c, NotValue): cond.append(f'not {c.lhs.name}.is_value()')
+                    if isinstance(c, PrefixOf): cond.append(f'{c.lhs.name}.prefix_of({c.rhs.name})')
+                    if isinstance(c, NotPrefixOf): cond.append(f'not {c.lhs.name}.prefix_of({c.rhs.name})')
+                    if isinstance(c, Finished): cond.append(f'{c.lhs.name} is None')
+                    if isinstance(c, NotFinished): cond.append(f'active {c.lhs.name}')
+
+            for dst, src in t.push: todo.append(f"{dst.name}!{src.name}")
+            for src in t.descend: todo.append(f"{src.name}.descend_or_next()")
+            for src, ds in t.next_i: todo.append(f"{src.name}.next(ds)")
+            if len(cond) == 0:
+                cond = ["else"]
+            temp = [f"{' \\n '.join(cond)}", f"{' \\n '.join(todo)}"]
+            label = f"{{{' | '.join(temp)}}}"
+            label = label.replace('>', '\\>')
+            label = label.replace('<', '\\<')
+            print(f"l{label_index} [shape=\"record\", label=\"{label}\"];")
+            print(f"{t.s_from.name} -> l{label_index} [arrowhead=\"none\"];")
+            print(f"l{label_index} -> {t.s_to.name};")
+            label_index += 1
 class Node:
     def __init__(self, graph, name): self.graph = graph; self.name = name
     @classmethod
@@ -53,13 +100,14 @@ class Src(Node):
     def __lt__(self, other: 'Src'): return Inequality('<', self, other)
     def __gt__(self, other: 'Src'): return Inequality('>', self, other)
     def __eq__(self, other: 'Src'): return Inequality('==', self, other)
+    def __ne__(self, other: 'Src'): return Inequality('!=', self, other)
 class Snk(Node): pass
 
 class Cond:
     pass
 
 class Inequality(Cond):
-    def __init__(self, kind: Literal["=="] | Literal["<"] | Literal[">"], lhs: Src, rhs: Src):
+    def __init__(self, kind: Literal["=="] | Literal["<"] | Literal[">"] | Literal["!="], lhs: Src, rhs: Src):
         self.kind = kind; self.lhs = lhs; self.rhs = rhs
 
 class IsValue(Cond):
@@ -86,12 +134,24 @@ class NotFinished(Cond):
     def __init__(self, lhs: Src):
         self.lhs = lhs
 
+class OpOrNot(Cond):
+    def __init__(self, kind: Literal["=="] | Literal["<"] | Literal[">"] | Literal[">="] | Literal["<="] | Literal["!="], lhs: Src, rhs: Src):
+        self.kind = kind; self.lhs = lhs; self.rhs = rhs
+
+class OpOrEqNotValue(Cond):
+    def __init__(self, kind: Literal["=="] | Literal["<"] | Literal[">"] | Literal[">="] | Literal["<="] | Literal["!="], lhs: Src, rhs: Src):
+        self.kind = kind; self.lhs = lhs; self.rhs = rhs
+
+class NEIfValue(Cond):
+    def __init__(self, kind: Literal["=="] | Literal["<"] | Literal[">"] | Literal[">="] | Literal["<="] | Literal["!="], lhs: Src, rhs: Src):
+        self.kind = kind; self.lhs = lhs; self.rhs = rhs
+
 class Transition:
-    def __init__(self, s_from, s_to, when, push, descend, next_i):
-        self.s_from = s_from; self.s_to = s_to; self.when = when; self.push = push; self.descend = descend; self.next_i = next_i
+    def __init__(self, s_from, s_to, when, push, descend, next_i, active):
+        self.s_from = s_from; self.s_to = s_to; self.when = when; self.push = push; self.descend = descend; self.next_i = next_i; self.active=active;
 class Vtx(Node):
-    def to(self, other, *when, push=(), descend=(), next_i=()):
-        self.graph.transitions.append(Transition(self, other, when, push, descend, next_i))
+    def to(self, other, *when, push=(), descend=(), next_i=(), active=()):
+        self.graph.transitions.append(Transition(self, other, when, push, descend, next_i, active))
 
 def ctx():
     # (a /\ c)\/(b /\ c) \ d
@@ -283,15 +343,15 @@ class Sink:
         self.data.append(inp)
 
 if __name__ == '__main__':
-    # g = ctx()
-    g = intersection_graph()
+    g = ctx()
+    # g = intersection_graph()
     g.py()
 
 
     x, y, z, w, _1, _2, _3 = ('000', '001', '010', '011', '100', '101', '110')
 
-    # a = Source('a', bittrieset(x, _2, _3))
-    a = Source('a', bittrieset(y, _1, _2, _3))
+    a = Source('a', bittrieset(x, _2, _3))
+    # a = Source('a', bittrieset(y, _1, _2, _3))
     b = Source('b', bittrieset(y, z, _1, _2))
     c = Source('c', bittrieset(z, w, _1, _2))
     d = Source('d', bittrieset(x, _1))
@@ -299,8 +359,8 @@ if __name__ == '__main__':
     r = Sink()
     #wanted: 010, 101
 
-    # r_wanted = ((a.data | b.data) & c.data) - d.data
-    r_wanted = ((a.data & b.data) & c.data)
+    r_wanted = ((a.data | b.data) & c.data) - d.data
+    # r_wanted = ((a.data & b.data) & c.data)
 
     s = StringIO()
     with redirect_stdout(s): g.py()
@@ -308,4 +368,7 @@ if __name__ == '__main__':
     except IndexError: print("stopped by exhaustion")
 
 
+    print(r_wanted)
     print("result", r.data)
+
+    g.dot()
