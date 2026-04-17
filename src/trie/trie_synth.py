@@ -81,7 +81,7 @@ class Graph:
 
             for dst, src in t.push: todo.append(f"{dst.name}!{src.name}")
             for src in t.descend: todo.append(f"{src.name}.descend_or_next()")
-            for src, ds in t.next_i: todo.append(f"{src.name}.next(ds)")
+            for src, ds in t.next_i: todo.append(f"{src.name}.next({[d.name for d in ds]})")
             if len(cond) == 0:
                 cond = ["else"]
             temp = [f"{' \\n '.join(cond)}", f"{' \\n '.join(todo)}"]

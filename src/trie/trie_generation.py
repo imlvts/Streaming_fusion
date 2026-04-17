@@ -60,32 +60,33 @@ class TrieExecution:
                 print("for minimum", k)
                 pgs, ngs = formula.groups()
 
-                pos_candidates = [
+                maxima = [
                     max(
                         (p for p in pg if values[p] is not None),
                         key=lambda p: values[p].path(),
                         default=None
                     )
-                    for pg in pgs[k]
+                    for pg in pgs[k].union(ngs[k])
                     if pg and any(values[p] is not None for p in pg)
                 ]
                 # print("pos candidates: ", [{p: values[p].path() for p in pg} for pg in pgs])
 
-                temp_pos = min(pos_candidates, key=lambda p: values[p].path()) if pos_candidates else None
+                # temp_pos = min(pos_candidates, key=lambda p: values[p].path()) if pos_candidates else None
+                temp = min(maxima, key=lambda p: values[p].path()) if maxima else None
 
-                neg_candidates = [
-                    max(
-                        (n for n in ng if values[n] is not None),
-                        key=lambda n: values[n].path(),
-                        default=None
-                    )
-                    for ng in ngs[k]
-                    if ng and any(values[n] is not None for n in ng)
-                ]
-                temp_neg = min(neg_candidates, key=lambda p: values[p].path()) if neg_candidates else None
-
-                candidates = [x for x in (temp_pos, temp_neg) if x is not None]
-                temp = min(candidates, key=lambda c: values[c].path()) if candidates else None
+                # neg_candidates = [
+                #     max(
+                #         (n for n in ng if values[n] is not None),
+                #         key=lambda n: values[n].path(),
+                #         default=None
+                #     )
+                #     for ng in ngs[k]
+                #     if ng and any(values[n] is not None for n in ng)
+                # ]
+                # temp_neg = min(neg_candidates, key=lambda p: values[p].path()) if neg_candidates else None
+                #
+                # candidates = [x for x in (temp_pos, temp_neg) if x is not None]
+                # temp = min(candidates, key=lambda c: values[c].path()) if candidates else None
                 print("approach", temp, values[temp].path() if temp else '/')
 
                 if temp is None:
@@ -115,6 +116,10 @@ class TrieExecution:
         clause_states = {e: g.states(f"sc{e}")[0] for e, c in enumerate(formula.clauses)}
         srcs = {v: g.sources(v)[0] for v in formula.vars()}
 
+        stateidx = 0
+
+        dependecies = formula.groups()
+
         pos_vars = {v for c in formula.clauses for v in c.P}
 
         g.init = s0
@@ -131,13 +136,16 @@ class TrieExecution:
                   *(srcs[ps[0]] == srcs[q] for q in ps),
                   *(OpOrNot(">=", srcs[v], srcs[ps[0]]) for v in pos_vars.difference(ps)),
                   *(NEIfValue("!=", srcs[n], srcs[ps[0]]) for n in clause.N), active=tuple(srcs[p] for p in ps))
-            # n is None or n > ps or (n == ps and not n.IsValue)
-            clause_states[e].to(s2, *(OpOrEqNotValue(">", srcs[n], srcs[ps[0]]) for n in clause.N), push=((r, srcs[ps[0]]),))
+            # possible optimization: create new state for every clause in which we know that the vars in that clause are part of the minima
+            clause_states[e].to(var_states[ps[0]], *(OpOrEqNotValue(">", srcs[n], srcs[ps[0]]) for n in clause.N), push=((r, srcs[ps[0]]),))
                                 # descend=tuple(srcs[p] for p in ps))
             for n in clause.N:
-                clause_states[e].to(clause_states[e], srcs[n] < srcs[ps[0]], active=(srcs[n],), descend=(srcs[n],))
+                new_state = g.states(f"n{stateidx}")[0]
+                clause_states[e].to(new_state, srcs[n] < srcs[ps[0]], active=(srcs[n],))
+                new_state.to(clause_states[e], PrefixOf(srcs[n], srcs[ps[0]]), active=(srcs[n],), descend=(srcs[n],))
+                new_state.to(clause_states[e], NotPrefixOf(srcs[n], srcs[ps[0]]), active=(srcs[n],), next_i=((srcs[n], (srcs[ps[0]], )),))
+                stateidx += 1
                 clause_states[e].to(s1, IsValue(srcs[n]), srcs[n] == srcs[ps[0]], active=(srcs[n],))
-                # clause_states[e].to(s1, NotValue(srcs[n]), srcs[n] == srcs[ps[0]], active=(srcs[n],))
 
         s1.to(s2)
 
@@ -199,8 +207,8 @@ if __name__ == '__main__':
     # f = DNF([Clause({"a", "b", "c", "d"}, {"e", "f"})])
 
     g = TrieExecution.create_state_machine(f)
-    # g.dot()
-    g.py()
+    g.dot()
+    # g.py()
 
 
 
