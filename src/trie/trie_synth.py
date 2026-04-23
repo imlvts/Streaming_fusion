@@ -36,12 +36,37 @@ class Graph:
                             f'or (tmp_{c.lhs.name}.path() == tmp_{c.rhs.name}.path() and not tmp_{c.lhs.name}.is_value()))')
                         if isinstance(c, IsValue): temp.append(f'tmp_{c.lhs.name}.is_value()')
                         if isinstance(c, NotValue): temp.append(f'not tmp_{c.lhs.name}.is_value()')
-                        if isinstance(c, PrefixOf): temp.append(f'tmp_{c.lhs.name}.prefix_of(tmp_{c.rhs.name})')
-                        if isinstance(c, NotPrefixOf): temp.append(f'not tmp_{c.lhs.name}.prefix_of(tmp_{c.rhs.name})')
+                        if isinstance(c, PrefixOf): temp.append(f'tmp_{c.lhs.name}.prefix_of(tmp_{c.rhs.name if not c.is_var else c.rhs})')
+                        # if isinstance(c, ValPrefixOf): temp.append(f'tmp_{c.lhs.name}.val_prefix_of({c.rhs})')
+                        if isinstance(c, NotPrefixOf): temp.append(f'not tmp_{c.lhs.name}.prefix_of(tmp_{c.rhs.name if not c.is_var else c.rhs})')
+                        # if isinstance(c, ValNotPrefixOf): temp.append(f'not tmp_{c.lhs.name}.val_prefix_of({c.rhs})')
                         if isinstance(c, Finished): temp.append(f'tmp_{c.lhs.name} is None')
                         if isinstance(c, NotFinished): temp.append(f'tmp_{c.lhs.name}')
+                        if isinstance(c, ValNone): temp.append(f'{c.var} is None')
                     print(f"\t\t\tif {' and '.join(temp)}:")
                 else: print(f"\t\t\tif True:")
+                # m = "min([" + ", ".join(["max([" + ", ".join([f"{e.name}.path()" for e in s if e is not None]) + "])" for s in t.define_to_approach]) + "], default=None)"
+                if t.define_to_approach:
+                    print(
+                        "\t\t\t\tm = min(("
+                        "x for x in ["
+                        + ", ".join(
+                            [
+                                "max((e for e in ["
+                                + ", ".join("tmp_" + e.name for e in s)
+                                + "] if e is not None), key=lambda e: e.path(), default=None)"
+                                for s in t.define_to_approach
+                            ]
+                        )
+                        + "] if x is not None), key=lambda e: e.path(), default=None)"
+                    )
+                    print(f"\t\t\t\tprint({[
+                                "max((e for e in ["
+                                + ", ".join("tmp_" + e.name for e in s)
+                                + "] if e is not None), key=lambda e: e.path(), default=None)"
+                                for s in t.define_to_approach
+                            ]})")
+                    print(f"\t\t\t\tprint(\"here is m\", m == None)")
                 for dst, src in t.push: print(f"\t\t\t\t{dst.name}.push(tmp_{src.name}.path())")
                 for src in t.descend: print(f"\t\t\t\ttmp_{src.name} = {src.name}.descend_or_next()")
                 for src, ds in t.next_i:
@@ -49,6 +74,8 @@ class Graph:
                         lvls = [f"{src.name}.difference_level({rhs.name})" for rhs in ds]
                         print(f"\t\t\t\ttmp_{src.name} = {src.name}.next(max({', '.join(lvls)}))")
                     else: print(f"\t\t\t\ttmp_{src.name} = {src.name}.next({src.name}.difference_level({ds[0].name}))")
+                for src, ds in t.next_i_var: print(f"\t\t\t\ttmp_{src.name} = {src.name}.next({src.name}.difference_level({ds}))")
+                for src in t.end: print(f"\t\t\t\ttmp_{src.name} = None")
                 print(f"\t\t\t\tstate = '{t.s_to.name}'")
                 print(f"\t\t\t\tcontinue")
             # print("\t\tprint(state, 'not continued!')")
@@ -74,14 +101,31 @@ class Graph:
                         f'({c.lhs.name} is None or ({c.lhs.name}.path() {c.kind} {c.rhs.name}.path() or not {c.lhs.name}.is_value()))')
                     if isinstance(c, IsValue): cond.append(f'{c.lhs.name}.is_value()')
                     if isinstance(c, NotValue): cond.append(f'not {c.lhs.name}.is_value()')
-                    if isinstance(c, PrefixOf): cond.append(f'{c.lhs.name}.prefix_of({c.rhs.name})')
-                    if isinstance(c, NotPrefixOf): cond.append(f'not {c.lhs.name}.prefix_of({c.rhs.name})')
+                    if isinstance(c, PrefixOf): cond.append(f'{c.lhs.name}.prefix_of({c.rhs.name if not c.is_var else c.rhs})')
+                    # if isinstance(c, ValPrefixOf): cond.append(f'{c.lhs.name}.prefix_of({c.rhs })')
+                    if isinstance(c, NotPrefixOf): cond.append(f'not {c.lhs.name}.prefix_of({c.rhs.name if not c.is_var else c.rhs})')
+                    # if isinstance(c, ValNotPrefixOf): cond.append(f'not {c.lhs.name}.prefix_of({c.rhs})')
                     if isinstance(c, Finished): cond.append(f'{c.lhs.name} is None')
                     if isinstance(c, NotFinished): cond.append(f'active {c.lhs.name}')
-
+                    if isinstance(c, ValNone): cond.append(f'{c.var} is None')
+            if t.define_to_approach:
+                todo.append(
+                    "m := argmin(["
+                    + ", ".join(
+                        [
+                            "argmax(["
+                            + ", ".join([e.name for e in s])
+                            + "])"
+                            for s in t.define_to_approach
+                        ]
+                    )
+                    + "], default=None)"
+                )
             for dst, src in t.push: todo.append(f"{dst.name}!{src.name}")
             for src in t.descend: todo.append(f"{src.name}.descend_or_next()")
             for src, ds in t.next_i: todo.append(f"{src.name}.next({[d.name for d in ds]})")
+            for src, ds in t.next_i_var: todo.append(f"{src.name}.next({src.name}.difference_level({ds}))")
+            for src in t.end: todo.append(f"end {src.name}")
             if len(cond) == 0:
                 cond = ["else"]
             temp = [f"{' \\n '.join(cond)}", f"{' \\n '.join(todo)}"]
@@ -119,12 +163,17 @@ class NotValue(Cond):
         self.lhs = lhs
 
 class PrefixOf(Cond):
-    def __init__(self, lhs: Src, rhs:Src):
-        self.lhs = lhs; self.rhs = rhs
+    def __init__(self, lhs: Src, rhs:Src, is_var=False):
+        self.lhs = lhs; self.rhs = rhs; self.is_var = is_var
+
 
 class NotPrefixOf(Cond):
-    def __init__(self, lhs: Src, rhs:Src):
-        self.lhs = lhs; self.rhs = rhs
+    def __init__(self, lhs: Src, rhs:Src, is_var=False):
+        self.lhs = lhs; self.rhs = rhs; self.is_var=is_var
+
+class ValNone(Cond):
+    def __init__(self, var):
+        self.var = var
 
 class Finished(Cond):
     def __init__(self, lhs: Src):
@@ -147,11 +196,11 @@ class NEIfValue(Cond):
         self.kind = kind; self.lhs = lhs; self.rhs = rhs
 
 class Transition:
-    def __init__(self, s_from, s_to, when, push, descend, next_i, active):
-        self.s_from = s_from; self.s_to = s_to; self.when = when; self.push = push; self.descend = descend; self.next_i = next_i; self.active=active;
+    def __init__(self, s_from, s_to, when, push, descend, next_i, next_i_var, active, define_to_approach, end):
+        self.s_from = s_from; self.s_to = s_to; self.when = when; self.push = push; self.descend = descend; self.next_i = next_i; self.next_i_var = next_i_var; self.active=active; self.define_to_approach=define_to_approach; self.end=end;
 class Vtx(Node):
-    def to(self, other, *when, push=(), descend=(), next_i=(), active=()):
-        self.graph.transitions.append(Transition(self, other, when, push, descend, next_i, active))
+    def to(self, other, *when, push=(), descend=(), next_i=(), next_i_var=(), active=(), define_to_approach=(), end=()):
+        self.graph.transitions.append(Transition(self, other, when, push, descend, next_i, next_i_var, active, define_to_approach, end))
 
 def ctx():
     # (a /\ c)\/(b /\ c) \ d
@@ -327,6 +376,12 @@ class Source:
         print(f"next_{i} {self.current.path} from {self.name}")
         return self
     def prefix_of(self, other):
+        res = other.path().startswith(self.path())
+        print("prefix", self.path(), other.path(), res)
+        return other.path().startswith(self.path())
+    def val_prefix_of(self, other):
+        res = other.path().startswith(self.path())
+        print(self.path(), other.path(), res)
         return other.path().startswith(self.path())
     def difference_level(self, other):
         return next((e for e, (c1, c2) in enumerate(zip(self.path(), other.path())) if c1 != c2), None)
