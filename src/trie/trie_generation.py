@@ -6,7 +6,7 @@ from src.trie.trie_synth import *
 class TrieExecution:
     @staticmethod
     def naive(formula, env):
-        print(formula.groups())
+        print(formula.dependencies())
         srcs = {k: Source(k, v) for (k, v) in env.items() if k in formula.vars()}
         r = Sink()
         values = {k: s.descend_or_next() for (k, s) in srcs.items()}
@@ -58,7 +58,7 @@ class TrieExecution:
 
 
                 print("for minimum", k)
-                pgs, ngs = formula.groups()
+                dependencies = formula.dependencies()
 
                 maxima = [
                     max(
@@ -66,7 +66,7 @@ class TrieExecution:
                         key=lambda p: values[p].path(),
                         default=None
                     )
-                    for pg in pgs[k].union(ngs[k])
+                    for pg in dependencies[k]
                     if pg and any(values[p] is not None for p in pg)
                 ]
                 # print("pos candidates: ", [{p: values[p].path() for p in pg} for pg in pgs])
@@ -169,7 +169,7 @@ class TrieExecution:
 
         stateidx = 0
 
-        p_dependencies, n_dependencies= formula.groups()
+        dependencies = formula.dependencies()
 
         pos_vars = {v for c in formula.clauses for v in c.P}
 
@@ -214,7 +214,7 @@ class TrieExecution:
                 if v2 in formula.singletons():
                     var_states[v].to(var_states[v], srcs[v] == srcs[v2], active=(srcs[v2],), descend=(srcs[v2],))
                     continue
-                depv2 =  p_dependencies[v2].union(n_dependencies[v2])
+                depv2 =  dependencies[v2]
                 if len(depv2) == 0:
                     var_states[v].to(var_states[v], srcs[v] == srcs[v2], active=(srcs[v2], ), descend=(srcs[v2],))
                 elif len(depv2) == 1 and len(next(iter(depv2))) == 1:
@@ -230,7 +230,7 @@ class TrieExecution:
                 else:
                     new_state = g.states(f"n{stateidx}")[0]
                     stateidx += 1
-                    var_states[v].to(new_state, srcs[v] == srcs[v2], active=(srcs[v2], ), define_to_approach=((srcs[p] for p in s) for s in p_dependencies[v2].union(n_dependencies[v2])))
+                    var_states[v].to(new_state, srcs[v] == srcs[v2], active=(srcs[v2], ), define_to_approach=((srcs[p] for p in s) for s in depv2))
                     new_state.to(var_states[v], ValNone("m"), descend=(srcs[v2],))
                     new_state.to(var_states[v], PrefixOf(srcs[v2], "m", True), descend=(srcs[v2],))
                     new_state.to(var_states[v], NotPrefixOf(srcs[v2], "m", True), next_i_var=((srcs[v2], "m"), ))

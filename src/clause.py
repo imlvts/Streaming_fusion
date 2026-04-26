@@ -145,16 +145,18 @@ class DNF:
 
         return DNF(frozenset(clauses))
 
-    def groups(self):
-        dp = DefaultDict()
-        dn = DefaultDict()
+    def dependencies(self):
+        # dp = DefaultDict()
+        # dn = DefaultDict()
+        dep = DefaultDict()
 
         for v in self.vars():
             pos = {c.P.difference(v) for c in self.clauses if v in c.P}
-            dp[v] = {s for s in pos if s}
+            # dp[v] = {s for s in pos if s}
             neg = {c.P.difference(v) for c in self.clauses if v in c.N}
-            dn[v] = {s for s in neg if s}
-        return dp, dn
+            # dn[v] = {s for s in neg if s}
+            dep[v] = {s for s in neg if s}.union({s for s in pos if s})
+        return dep
 
     def singletons(self):
         return {v for v in self.vars() if any(len(c.P) == 1 and v in c.P for c in self.clauses)}
