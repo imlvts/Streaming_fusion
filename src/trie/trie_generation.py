@@ -234,14 +234,26 @@ class TrieExecution:
                     new_state.to(var_states[v], PrefixOf(srcs[v2], "m", True), descend=(srcs[v2],))
                     new_state.to(var_states[v], NotPrefixOf(srcs[v2], "m", True), next_i_var=((srcs[v2], "m"), ))
                 # var_states[v].to(var_states[v], srcs[v] == srcs[v2], active=(srcs[v2], ), descend=(srcs[v2],))
-            var_states[v].to(s1, descend=(srcs[v],))
+
+            # else branch
+            if v in formula.singletons():
+                var_states[v].to(s1, descend=(srcs[v],))
+
+            else:
+                new_state = g.states(f"n{stateidx}")[0]
+                stateidx += 1
+                var_states[v].to(new_state,
+                                 define_to_approach=[[srcs[p] for p in s] for s in dependencies[v]])
+                new_state.to(s1, ValNone("m"), descend=(srcs[v],))
+                new_state.to(s1, PrefixOf(srcs[v], "m", True), descend=(srcs[v],))
+                new_state.to(s1, NotPrefixOf(srcs[v], "m", True), next_i_var=((srcs[v], "m"),))
 
         return g
 
 
 
 if __name__ == '__main__':
-
+    """
     c1 = Clause.make({"a", "c"}, {"d"})
     c2 = Clause.make({"b", "c"}, {"d"})
     formula = DNF([c1, c2])
@@ -260,23 +272,21 @@ if __name__ == '__main__':
         "c": bittrieset(z, w, _1, _2),
         "d": bittrieset(x, _1),
     }
-
     """
-    clauses = [Clause(P=frozenset({'d', 'a'}), N=frozenset({'e'})),
-               Clause(P=frozenset({'c', 'd', 'e'}), N=frozenset({'f'})), Clause(P=frozenset({'b'}), N=frozenset({'d'}))]
-    env = {
-        "a": {('0', None), ('01', None), ('0111', None), ('10', None), ('1000', None)},
-        "b": {('000011', None), ('101110', None)},
-        "c": {('0110', None), ('100', None), ('100011', None), ('100100', None), ('1101', None)},
-        "d": {('00', None), ('0110', None), ('0111', None), ('10', None), ('100', None), ('1000', None),
-              ('100011', None), ('100100', None), ('11110', None)},
-        "e": {('000011', None), ('000100', None), ('010', None), ('011000', None), ('0111', None), ('100', None),
-              ('100011', None), ('100100', None)},
-        "f": {('1000', None), ('101100', None)},
+
+
+    clauses=[Clause(P=frozenset({'e', 'f'}), N=frozenset()), Clause(P=frozenset({'e', 'c', 'b'}), N=frozenset({'a', 'f'})), Clause(P=frozenset({'f'}), N=frozenset({'e', 'c'}))]
+    env={
+        "a": {},
+        "b": {('001111', None), ('010', None), ('1000', None), ('10100', None), ('11', None), ('1101', None)},
+        "c": {('0', None), ('00000', None), ('001111', None), ('010', None), ('01001', None), ('110001', None), ('1101', None)},
+        "d": {('000111', None), ('01000', None), ('10010', None), ('1110', None)},
+        "e": {('001111', None), ('01001', None), ('0101', None), ('1010', None), ('10100', None), ('110001', None), ('1101', None)},
+        "f": {('000101', None), ('101', None), ('1010', None), ('11', None), ('110001', None), ('110011', None)},
     }
-    # wanted = ['000011', '10', '100', '1000', '100011', '100100', '101110']
-    # actual = ['000011', '0111', '10', '100', '1000', '100011', '100100', '101110']
-    
+    # wanted=['000101', '001111', '101', '1010', '11', '110001', '110011', '1101']
+    # actual=['001111', '101', '1010', '11', '110001', '1101']
+
 
     env_ = {k: bittrieset(*{s[0] for s in v}) for k, v in env.items()}
     a = Source('a', env_["a"])
@@ -285,11 +295,11 @@ if __name__ == '__main__':
     d = Source('d', env_["d"])
     e = Source('e', env_["e"])
     f = Source('f', env_["f"])
-    """
+
 
     r = Sink()
 
-    # formula = DNF(clauses)
+    formula = DNF(clauses)
     # f = DNF([Clause({"a", "b", "c", "d"}, {"e", "f"})])
 
     g = TrieExecution.create_state_machine(formula)

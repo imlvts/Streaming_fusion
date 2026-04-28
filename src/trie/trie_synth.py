@@ -104,7 +104,6 @@ class Graph:
                     if isinstance(c, ValNone): cond.append(f'{c.var} is None')
             if t.define_to_approach:
                 tryout = list(t.define_to_approach)
-                print("hereso", [e.name for s in tryout for e in s])
                 todo.append(
                     "m := argmin(["
                     + ", ".join(
