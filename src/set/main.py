@@ -10,6 +10,9 @@ if __name__ == '__main__':
     # make expression
     a, b, c, d = map(Var, "abcd")
     expr = ((a|b)&c) - d
+    # expr = (((b - c) | (d & c)) & (b - (b & d)))
+    # expr = (a | b) & (c | (a & b))
+
     print("original expression: ", expr)
 
     # convert to normal form
@@ -19,13 +22,15 @@ if __name__ == '__main__':
     # make state machine
     g = graph_generation(formula)
     print("state machine:")
-    g.dot()
+    print()
+    g.dot(expr.show())
+    print()
 
 
 
     # get a result
 
-    env = {"a": {'1', 'B', 'C', 'A', '3'},
+    env = {"a": {'1', 'B', 'C'},
            "b": {'2', '3', 'A'},
            "c": {'3', '4', 'A', 'B'},
            "d": {'1', 'A'}}

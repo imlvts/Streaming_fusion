@@ -613,9 +613,9 @@ class TestGraphGeneration2(FormulaTestBase):
 
     def test_random_formulas(self):
         self.run_random_formulas(
-            formula_trials=50,
-            env_trials=10,
-            seed=123,
+            formula_trials=100,
+            env_trials=20,
+            seed=851,
             variable_count=6,
             clause_count=4,
         )

@@ -10,6 +10,7 @@ class Graph:
     def sinks(self, *names): new = Snk.named(self, *names); self.snks += new; return new
     def states(self, *names): new = Vtx.named(self, *names); self.vtcs += new; return new
     def py(self):
+        print(f"from src.trie.utils import *")
         for src in self.srcs:
             print(f"tmp_{src.name} = None")
         print(f"state = '{self.init.name}'")
@@ -23,7 +24,6 @@ class Graph:
                 else: print(f"\t\tif True:")
                 if t.when:
                     temp = []
-                    all_vars = []
                     for c in t.when:
                         if isinstance(c, Inequality): temp.append(f'tmp_{c.lhs.name}.path() {c.kind} tmp_{c.rhs.name}.path()')
                         if isinstance(c, OpOrNot): temp.append(
@@ -36,9 +36,9 @@ class Graph:
                             f'or (tmp_{c.lhs.name}.path() == tmp_{c.rhs.name}.path() and not tmp_{c.lhs.name}.is_value()))')
                         if isinstance(c, IsValue): temp.append(f'tmp_{c.lhs.name}.is_value()')
                         if isinstance(c, NotValue): temp.append(f'not tmp_{c.lhs.name}.is_value()')
-                        if isinstance(c, PrefixOf): temp.append(f'tmp_{c.lhs.name}.prefix_of(tmp_{c.rhs.name if not c.is_var else c.rhs})')
+                        if isinstance(c, PrefixOf): temp.append(f'tmp_{c.lhs.name}.prefix_of({'tmp_' + c.rhs.name if not c.is_var else c.rhs})')
                         # if isinstance(c, ValPrefixOf): temp.append(f'tmp_{c.lhs.name}.val_prefix_of({c.rhs})')
-                        if isinstance(c, NotPrefixOf): temp.append(f'not tmp_{c.lhs.name}.prefix_of(tmp_{c.rhs.name if not c.is_var else c.rhs})')
+                        if isinstance(c, NotPrefixOf): temp.append(f'not tmp_{c.lhs.name}.prefix_of({'tmp_' + c.rhs.name if not c.is_var else c.rhs})')
                         # if isinstance(c, ValNotPrefixOf): temp.append(f'not tmp_{c.lhs.name}.val_prefix_of({c.rhs})')
                         if isinstance(c, Finished): temp.append(f'tmp_{c.lhs.name} is None')
                         if isinstance(c, NotFinished): temp.append(f'tmp_{c.lhs.name}')
@@ -47,26 +47,20 @@ class Graph:
                 else: print(f"\t\t\tif True:")
                 # m = "min([" + ", ".join(["max([" + ", ".join([f"{e.name}.path()" for e in s if e is not None]) + "])" for s in t.define_to_approach]) + "], default=None)"
                 if t.define_to_approach:
-                    print(
-                        "\t\t\t\tm = min(("
-                        "x for x in ["
-                        + ", ".join(
-                            [
-                                "max((e for e in ["
-                                + ", ".join("tmp_" + e.name for e in s)
-                                + "] if e is not None), key=lambda e: e.path(), default=None)"
-                                for s in t.define_to_approach
-                            ]
+                    tryout = t.define_to_approach
+                    # print(f"\t\t\t\tprint({len(list(tryout[1]))})")
+                    print(f"\t\t\t\tprint(\"vals\", {', '.join('tmp_' + e.name for s in tryout for e in s)})")
+                    #print(f"\t\t\t\tprint(\"here\", {[e.name for s in t.define_to_approach for e in s]})")
+                    if len(t.define_to_approach) == 1:
+                        print(
+                            f"\t\t\t\tm = {f'argmax([{", ".join('tmp_' + e.name for e in t.define_to_approach[0])}])' if len(t.define_to_approach[0]) > 1 else 'tmp_' + t.define_to_approach[0][0].name}"
                         )
-                        + "] if x is not None), key=lambda e: e.path(), default=None)"
-                    )
-                    print(f"\t\t\t\tprint({[
-                                "max((e for e in ["
-                                + ", ".join("tmp_" + e.name for e in s)
-                                + "] if e is not None), key=lambda e: e.path(), default=None)"
-                                for s in t.define_to_approach
-                            ]})")
-                    print(f"\t\t\t\tprint(\"here is m\", m == None)")
+                    else:
+                        print(
+                            f"\t\t\t\tm = argmin([{", ".join(f'argmax([{", ".join('tmp_' + e.name for e in s)}])' if len(s) > 1 else 'tmp_' + s[0].name for s in tryout)}])"
+                        )
+
+                    # print(f"\t\t\t\tprint(\"here is m\", m.name)")
                 for dst, src in t.push: print(f"\t\t\t\t{dst.name}.push(tmp_{src.name}.path())")
                 for src in t.descend: print(f"\t\t\t\ttmp_{src.name} = {src.name}.descend_or_next()")
                 for src, ds in t.next_i:
@@ -109,6 +103,8 @@ class Graph:
                     if isinstance(c, NotFinished): cond.append(f'active {c.lhs.name}')
                     if isinstance(c, ValNone): cond.append(f'{c.var} is None')
             if t.define_to_approach:
+                tryout = list(t.define_to_approach)
+                print("hereso", [e.name for s in tryout for e in s])
                 todo.append(
                     "m := argmin(["
                     + ", ".join(
@@ -116,7 +112,7 @@ class Graph:
                             "argmax(["
                             + ", ".join([e.name for e in s])
                             + "])"
-                            for s in t.define_to_approach
+                            for s in tryout
                         ]
                     )
                     + "], default=None)"
@@ -200,7 +196,7 @@ class Transition:
         self.s_from = s_from; self.s_to = s_to; self.when = when; self.push = push; self.descend = descend; self.next_i = next_i; self.next_i_var = next_i_var; self.active=active; self.define_to_approach=define_to_approach; self.end=end;
 class Vtx(Node):
     def to(self, other, *when, push=(), descend=(), next_i=(), next_i_var=(), active=(), define_to_approach=(), end=()):
-        self.graph.transitions.append(Transition(self, other, when, push, descend, next_i, next_i_var, active, define_to_approach, end))
+        self.graph.transitions.append(Transition(self, other, when, push, descend, next_i, next_i_var, active, list(define_to_approach), end))
 
 def ctx():
     # (a /\ c)\/(b /\ c) \ d

@@ -2,7 +2,6 @@ from src.clause import Clause, DNF
 from src.trie.trie import bittrieset, bittriemap
 from src.trie.trie_synth import *
 
-
 class TrieExecution:
     @staticmethod
     def naive(formula, env):
@@ -230,7 +229,7 @@ class TrieExecution:
                 else:
                     new_state = g.states(f"n{stateidx}")[0]
                     stateidx += 1
-                    var_states[v].to(new_state, srcs[v] == srcs[v2], active=(srcs[v2], ), define_to_approach=((srcs[p] for p in s) for s in depv2))
+                    var_states[v].to(new_state, srcs[v] == srcs[v2], active=(srcs[v2], ), define_to_approach=[[srcs[p] for p in s] for s in depv2])
                     new_state.to(var_states[v], ValNone("m"), descend=(srcs[v2],))
                     new_state.to(var_states[v], PrefixOf(srcs[v2], "m", True), descend=(srcs[v2],))
                     new_state.to(var_states[v], NotPrefixOf(srcs[v2], "m", True), next_i_var=((srcs[v2], "m"), ))
@@ -316,4 +315,5 @@ if __name__ == '__main__':
     print(formula.show())
     print("wanted", list(wanted.keys_iterator()))
     print("found", r.data)
+
 
