@@ -40,17 +40,18 @@ class Graph:
                         if isinstance(c, NotPrefixOf): temp.append(f'not tmp_{c.lhs.name}.prefix_of({'tmp_' + c.rhs.name if not c.is_var else c.rhs})')
                         if isinstance(c, Finished): temp.append(f'tmp_{c.lhs.name} is None')
                         if isinstance(c, NotFinished): temp.append(f'tmp_{c.lhs.name}')
-                        if isinstance(c, ValNone): temp.append(f'{c.var} is None')
+                        if isinstance(c, VarNone): temp.append(f'{c.var} is None')
                     print(f"\t\t\tif {' and '.join(temp)}:")
                 else: print(f"\t\t\tif True:")
                 if t.define_to_approach:
-                    if len(t.define_to_approach) == 1:
+                    varname, values = t.define_to_approach
+                    if len(values) == 1:
                         print(
-                            f"\t\t\t\tm = {f'argmax([{", ".join('tmp_' + e.name for e in t.define_to_approach[0])}])' if len(t.define_to_approach[0]) > 1 else 'tmp_' + t.define_to_approach[0][0].name}"
+                            f"\t\t\t\t{varname} = {f'argmax([{", ".join('tmp_' + e.name for e in values[0])}])' if len(values[0]) > 1 else 'tmp_' + values[0][0].name}"
                         )
                     else:
                         print(
-                            f"\t\t\t\tm = argmin([{", ".join(f'argmax([{", ".join('tmp_' + e.name for e in s)}])' if len(s) > 1 else 'tmp_' + s[0].name for s in t.define_to_approach)}])"
+                            f"\t\t\t\t{varname} = argmin([{", ".join(f'argmax([{", ".join('tmp_' + e.name for e in s)}])' if len(s) > 1 else 'tmp_' + s[0].name for s in values)}])"
                         )
 
                     # print(f"\t\t\t\tprint(\"here is m\", m.name)")
@@ -94,15 +95,16 @@ class Graph:
                     # if isinstance(c, ValNotPrefixOf): cond.append(f'not {c.lhs.name}.prefix_of({c.rhs})')
                     if isinstance(c, Finished): cond.append(f'{c.lhs.name} is None')
                     if isinstance(c, NotFinished): cond.append(f'active {c.lhs.name}')
-                    if isinstance(c, ValNone): cond.append(f'{c.var} is None')
+                    if isinstance(c, VarNone): cond.append(f'{c.var} is None')
             if t.define_to_approach:
-                if len(t.define_to_approach) == 1:
+                varname, values = t.define_to_approach
+                if len(values) == 1:
                     todo.append(
-                        f"m = {f'argmax({", ".join(e.name for e in t.define_to_approach[0])})' if len(t.define_to_approach[0]) > 1 else t.define_to_approach[0][0].name}"
+                        f"{varname} = {f'argmax({", ".join(e.name for e in values[0])})' if len(values[0]) > 1 else values[0][0].name}"
                     )
                 else:
                     todo.append(
-                        f"m = argmin({", ".join(f'argmax({", ".join(e.name for e in s)})' if len(s) > 1 else s[0].name for s in t.define_to_approach)})"
+                        f"{varname} = argmin({", ".join(f'argmax({", ".join(e.name for e in s)})' if len(s) > 1 else s[0].name for s in values)})"
                     )
             for dst, src in t.push: todo.append(f"{dst.name}!{src.name}")
             for src in t.descend: todo.append(f"{src.name}.descend_or_next()")
@@ -154,7 +156,7 @@ class NotPrefixOf(Cond):
     def __init__(self, lhs: Src, rhs:Src, is_var=False):
         self.lhs = lhs; self.rhs = rhs; self.is_var=is_var
 
-class ValNone(Cond):
+class VarNone(Cond):
     def __init__(self, var):
         self.var = var
 

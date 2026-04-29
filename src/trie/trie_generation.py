@@ -229,8 +229,8 @@ class TrieExecution:
                 else:
                     new_state = g.states(f"n{stateidx}")[0]
                     stateidx += 1
-                    var_states[v].to(new_state, srcs[v] == srcs[v2], active=(srcs[v2], ), define_to_approach=[[srcs[p] for p in s] for s in depv2])
-                    new_state.to(var_states[v], ValNone("m"), descend=(srcs[v2],))
+                    var_states[v].to(new_state, srcs[v] == srcs[v2], active=(srcs[v2], ), define_to_approach=("m", [[srcs[p] for p in s] for s in depv2]))
+                    new_state.to(var_states[v], VarNone("m"), descend=(srcs[v2],))
                     new_state.to(var_states[v], PrefixOf(srcs[v2], "m", True), descend=(srcs[v2],))
                     new_state.to(var_states[v], NotPrefixOf(srcs[v2], "m", True), next_i_var=((srcs[v2], "m"), ))
                 # var_states[v].to(var_states[v], srcs[v] == srcs[v2], active=(srcs[v2], ), descend=(srcs[v2],))
@@ -243,8 +243,8 @@ class TrieExecution:
                 new_state = g.states(f"n{stateidx}")[0]
                 stateidx += 1
                 var_states[v].to(new_state,
-                                 define_to_approach=[[srcs[p] for p in s] for s in dependencies[v]])
-                new_state.to(s1, ValNone("m"), descend=(srcs[v],))
+                                 define_to_approach=("m", [[srcs[p] for p in s] for s in dependencies[v]]))
+                new_state.to(s1, VarNone("m"), descend=(srcs[v],))
                 new_state.to(s1, PrefixOf(srcs[v], "m", True), descend=(srcs[v],))
                 new_state.to(s1, NotPrefixOf(srcs[v], "m", True), next_i_var=((srcs[v], "m"),))
 
