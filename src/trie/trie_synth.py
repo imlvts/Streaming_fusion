@@ -45,12 +45,8 @@ class Graph:
                         if isinstance(c, ValNone): temp.append(f'{c.var} is None')
                     print(f"\t\t\tif {' and '.join(temp)}:")
                 else: print(f"\t\t\tif True:")
-                # m = "min([" + ", ".join(["max([" + ", ".join([f"{e.name}.path()" for e in s if e is not None]) + "])" for s in t.define_to_approach]) + "], default=None)"
                 if t.define_to_approach:
                     tryout = t.define_to_approach
-                    # print(f"\t\t\t\tprint({len(list(tryout[1]))})")
-                    print(f"\t\t\t\tprint(\"vals\", {', '.join('tmp_' + e.name for s in tryout for e in s)})")
-                    #print(f"\t\t\t\tprint(\"here\", {[e.name for s in t.define_to_approach for e in s]})")
                     if len(t.define_to_approach) == 1:
                         print(
                             f"\t\t\t\tm = {f'argmax([{", ".join('tmp_' + e.name for e in t.define_to_approach[0])}])' if len(t.define_to_approach[0]) > 1 else 'tmp_' + t.define_to_approach[0][0].name}"
