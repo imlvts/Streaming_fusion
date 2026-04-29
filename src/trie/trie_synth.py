@@ -37,23 +37,20 @@ class Graph:
                         if isinstance(c, IsValue): temp.append(f'tmp_{c.lhs.name}.is_value()')
                         if isinstance(c, NotValue): temp.append(f'not tmp_{c.lhs.name}.is_value()')
                         if isinstance(c, PrefixOf): temp.append(f'tmp_{c.lhs.name}.prefix_of({'tmp_' + c.rhs.name if not c.is_var else c.rhs})')
-                        # if isinstance(c, ValPrefixOf): temp.append(f'tmp_{c.lhs.name}.val_prefix_of({c.rhs})')
                         if isinstance(c, NotPrefixOf): temp.append(f'not tmp_{c.lhs.name}.prefix_of({'tmp_' + c.rhs.name if not c.is_var else c.rhs})')
-                        # if isinstance(c, ValNotPrefixOf): temp.append(f'not tmp_{c.lhs.name}.val_prefix_of({c.rhs})')
                         if isinstance(c, Finished): temp.append(f'tmp_{c.lhs.name} is None')
                         if isinstance(c, NotFinished): temp.append(f'tmp_{c.lhs.name}')
                         if isinstance(c, ValNone): temp.append(f'{c.var} is None')
                     print(f"\t\t\tif {' and '.join(temp)}:")
                 else: print(f"\t\t\tif True:")
                 if t.define_to_approach:
-                    tryout = t.define_to_approach
                     if len(t.define_to_approach) == 1:
                         print(
                             f"\t\t\t\tm = {f'argmax([{", ".join('tmp_' + e.name for e in t.define_to_approach[0])}])' if len(t.define_to_approach[0]) > 1 else 'tmp_' + t.define_to_approach[0][0].name}"
                         )
                     else:
                         print(
-                            f"\t\t\t\tm = argmin([{", ".join(f'argmax([{", ".join('tmp_' + e.name for e in s)}])' if len(s) > 1 else 'tmp_' + s[0].name for s in tryout)}])"
+                            f"\t\t\t\tm = argmin([{", ".join(f'argmax([{", ".join('tmp_' + e.name for e in s)}])' if len(s) > 1 else 'tmp_' + s[0].name for s in t.define_to_approach)}])"
                         )
 
                     # print(f"\t\t\t\tprint(\"here is m\", m.name)")
@@ -99,19 +96,14 @@ class Graph:
                     if isinstance(c, NotFinished): cond.append(f'active {c.lhs.name}')
                     if isinstance(c, ValNone): cond.append(f'{c.var} is None')
             if t.define_to_approach:
-                tryout = list(t.define_to_approach)
-                todo.append(
-                    "m := argmin(["
-                    + ", ".join(
-                        [
-                            "argmax(["
-                            + ", ".join([e.name for e in s])
-                            + "])"
-                            for s in tryout
-                        ]
+                if len(t.define_to_approach) == 1:
+                    todo.append(
+                        f"m = {f'argmax({", ".join(e.name for e in t.define_to_approach[0])})' if len(t.define_to_approach[0]) > 1 else t.define_to_approach[0][0].name}"
                     )
-                    + "], default=None)"
-                )
+                else:
+                    todo.append(
+                        f"m = argmin({", ".join(f'argmax({", ".join(e.name for e in s)})' if len(s) > 1 else s[0].name for s in t.define_to_approach)})"
+                    )
             for dst, src in t.push: todo.append(f"{dst.name}!{src.name}")
             for src in t.descend: todo.append(f"{src.name}.descend_or_next()")
             for src, ds in t.next_i: todo.append(f"{src.name}.next({[d.name for d in ds]})")
