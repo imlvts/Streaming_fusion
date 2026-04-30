@@ -25,22 +25,18 @@ class Graph:
                 if t.when:
                     temp = []
                     for c in t.when:
-                        if isinstance(c, Inequality): temp.append(f'tmp_{c.lhs.name}.path() {c.kind} tmp_{c.rhs.name}.path()')
-                        if isinstance(c, OpOrNot): temp.append(
-                            f'(tmp_{c.lhs.name} is None or tmp_{c.lhs.name}.path() {c.kind} tmp_{c.rhs.name}.path())')
-                        if isinstance(c, NEIfValue): temp.append(
-                            f'(tmp_{c.lhs.name} is None or (tmp_{c.lhs.name}.path() {c.kind} tmp_{c.rhs.name}.path() or not tmp_{c.lhs.name}.is_value()))')
-                        if isinstance(c, OpOrEqNotValue): temp.append(
-                            f'(tmp_{c.lhs.name} is None '
-                            f'or tmp_{c.lhs.name}.path() {c.kind} tmp_{c.rhs.name}.path() '
-                            f'or (tmp_{c.lhs.name}.path() == tmp_{c.rhs.name}.path() and not tmp_{c.lhs.name}.is_value()))')
-                        if isinstance(c, IsValue): temp.append(f'tmp_{c.lhs.name}.is_value()')
-                        if isinstance(c, NotValue): temp.append(f'not tmp_{c.lhs.name}.is_value()')
-                        if isinstance(c, PrefixOf): temp.append(f'tmp_{c.lhs.name}.prefix_of({'tmp_' + c.rhs.name if not c.is_var else c.rhs})')
-                        if isinstance(c, NotPrefixOf): temp.append(f'not tmp_{c.lhs.name}.prefix_of({'tmp_' + c.rhs.name if not c.is_var else c.rhs})')
-                        if isinstance(c, Finished): temp.append(f'tmp_{c.lhs.name} is None')
-                        if isinstance(c, NotFinished): temp.append(f'tmp_{c.lhs.name}')
-                        if isinstance(c, VarNone): temp.append(f'{c.var} is None')
+                        match c:
+                            case Inequality(kind=kind, lhs=lhs, rhs=rhs): temp.append(f'tmp_{lhs.name}.path() {kind} tmp_{rhs.name}.path()')
+                            case OpOrNot(kind=kind, lhs=lhs, rhs=rhs): temp.append(f'(tmp_{lhs.name} is None or tmp_{lhs.name}.path() {kind} tmp_{rhs.name}.path())')
+                            case NEIfValue(kind=kind, lhs=lhs, rhs=rhs): temp.append( f'(tmp_{lhs.name} is None or (tmp_{lhs.name}.path() {kind} tmp_{rhs.name}.path() or not tmp_{lhs.name}.is_value()))')
+                            case OpOrEqNotValue(kind=kind, lhs=lhs, rhs=rhs): temp.append(f'(tmp_{lhs.name} is None or tmp_{lhs.name}.path() {kind} tmp_{rhs.name}.path() or (tmp_{lhs.name}.path() == tmp_{rhs.name}.path() and not tmp_{lhs.name}.is_value()))')
+                            case IsValue(lhs=lhs): temp.append(f'tmp_{lhs.name}.is_value()')
+                            case NotValue(lhs=lhs): temp.append(f'not tmp_{lhs.name}.is_value()')
+                            case PrefixOf(lhs=lhs, rhs=rhs, is_var=is_var):  temp.append(f'tmp_{lhs.name}.prefix_of({rhs if is_var else f'tmp_{rhs.name}'})')
+                            case NotPrefixOf(lhs=lhs, rhs=rhs, is_var=is_var): temp.append(f'not tmp_{lhs.name}.prefix_of({rhs if is_var else f'tmp_{rhs.name}'})')
+                            case Finished(lhs=lhs): temp.append(f'tmp_{lhs.name} is None')
+                            case NotFinished(lhs=lhs): temp.append(f'tmp_{lhs.name}')
+                            case VarNone(var=var): temp.append(f'{var} is None')
                     print(f"\t\t\tif {' and '.join(temp)}:")
                 else: print(f"\t\t\tif True:")
                 if t.define_to_approach:
@@ -82,20 +78,22 @@ class Graph:
             # for src in t.finished: cond.append(f"finished {src.name}")
             if t.when:
                 for c in t.when:
-                    if isinstance(c, Inequality): cond.append(f'{c.lhs.name} {c.kind} {c.rhs.name}')
-                    if isinstance(c, OpOrNot): cond.append(
-                        f'({c.lhs.name} is None or {c.lhs.name} {c.kind} {c.rhs.name})')
-                    if isinstance(c, NEIfValue): cond.append(
-                        f'({c.lhs.name} is None or ({c.lhs.name}.path() {c.kind} {c.rhs.name}.path() or not {c.lhs.name}.is_value()))')
-                    if isinstance(c, IsValue): cond.append(f'{c.lhs.name}.is_value()')
-                    if isinstance(c, NotValue): cond.append(f'not {c.lhs.name}.is_value()')
-                    if isinstance(c, PrefixOf): cond.append(f'{c.lhs.name}.prefix_of({c.rhs.name if not c.is_var else c.rhs})')
-                    # if isinstance(c, ValPrefixOf): cond.append(f'{c.lhs.name}.prefix_of({c.rhs })')
-                    if isinstance(c, NotPrefixOf): cond.append(f'not {c.lhs.name}.prefix_of({c.rhs.name if not c.is_var else c.rhs})')
-                    # if isinstance(c, ValNotPrefixOf): cond.append(f'not {c.lhs.name}.prefix_of({c.rhs})')
-                    if isinstance(c, Finished): cond.append(f'{c.lhs.name} is None')
-                    if isinstance(c, NotFinished): cond.append(f'active {c.lhs.name}')
-                    if isinstance(c, VarNone): cond.append(f'{c.var} is None')
+                    match c:
+                        case Inequality(kind=kind, lhs=lhs, rhs=rhs): cond.append(f'{lhs.name} {kind} {rhs.name}')
+                        case OpOrNot(kind=kind, lhs=lhs, rhs=rhs): cond.append(f'({lhs.name} is None or {lhs.name} {kind} {rhs.name})')
+                        case NEIfValue(kind=kind, lhs=lhs, rhs=rhs):
+                            cond.append(
+                                f'({lhs.name} is None or '
+                                f'({lhs.name}.path() {kind} {rhs.name}.path() '
+                                f'or not {lhs.name}.is_value()))'
+                            )
+                        case IsValue(lhs=lhs): cond.append(f'{lhs.name}.is_value()')
+                        case NotValue(lhs=lhs): cond.append(f'not {lhs.name}.is_value()')
+                        case PrefixOf(lhs=lhs, rhs=rhs, is_var=is_var): cond.append(f'{lhs.name}.prefix_of({rhs if is_var else rhs.name})')
+                        case NotPrefixOf(lhs=lhs, rhs=rhs, is_var=is_var): cond.append(f'not {lhs.name}.prefix_of({rhs if is_var else rhs.name})')
+                        case Finished(lhs=lhs): cond.append(f'{lhs.name} is None')
+                        case NotFinished(lhs=lhs): cond.append(f'active {lhs.name}')
+                        case VarNone(var=var): cond.append(f'{var} is None')
             if t.define_to_approach:
                 varname, values = t.define_to_approach
                 if len(values) == 1:
