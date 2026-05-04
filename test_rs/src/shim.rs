@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 // shim for PathMap methods
 use pathmap::alloc::{Allocator};
 pub use pathmap::{PathMap, zipper::ReadZipperUntracked};
@@ -22,12 +23,12 @@ pub use pathmap::zipper::{ZipperMoving, Zipper};
 
 // descend first byte or visit next branch anywhere up the trie
 // TODO(igor): This function clones
-pub fn descend_or_next<'a, 'path, V, A>
-    (s: &mut ReadZipperUntracked<'a, 'path, V, A>)
-     -> Option<ReadZipperUntracked<'a, 'path, V, A>>
+pub fn descend_or_next<'r, 'a, 'path, V, A>
+    (s: &'r RefCell<ReadZipperUntracked<'a, 'path, V, A>>)
+     -> Option<&'r RefCell<ReadZipperUntracked<'a, 'path, V, A>>>
 where V: Clone + Send + Sync + Unpin, A: Allocator
 {
-    let mut current = s.clone();
+    let mut current = s.borrow_mut();
     if !current.descend_first_byte() {
         loop {
             if current.to_next_sibling_byte() {
@@ -38,52 +39,57 @@ where V: Clone + Send + Sync + Unpin, A: Allocator
             }
         }
     }
-    *s = current;
-    Some(s.clone())
+    Some(s)
 }
 
-pub fn prefix_of<'a, 'path, V, A>(
-    a: Option<&ReadZipperUntracked<'a, 'path, V, A>>,
-    b: Option<&ReadZipperUntracked<'a, 'path, V, A>>
+pub fn prefix_of<'r, 'a, 'path, V, A>(
+    a: &Option<&'r RefCell<ReadZipperUntracked<'a, 'path, V, A>>>,
+    b: &Option<&'r RefCell<ReadZipperUntracked<'a, 'path, V, A>>>
 ) -> bool
 where V: Clone + Send + Sync + Unpin, A: Allocator
 {
     // def prefix_of(self, other): other.path().startswith(self.path())
     match (a, b) {
-        (Some(a), Some(b)) => b.path().starts_with(a.path()),
+        (Some(a), Some(b)) => b.borrow().path().starts_with(a.borrow().path()),
         _ => false,
     }
 }
 
-// TODO(igor): This function clones
-pub fn argmin<'a, 'path, V, A>
-    (v: &[&Option<ReadZipperUntracked<'a, 'path, V, A>>])
-     -> Option<ReadZipperUntracked<'a, 'path, V, A>>
+pub fn argmin<'r, 'a, 'path, V, A>
+    (v: &[&Option<&'r RefCell<ReadZipperUntracked<'a, 'path, V, A>>>])
+     -> Option<&'r RefCell<ReadZipperUntracked<'a, 'path, V, A>>>
 where V: Clone + Send + Sync + Unpin, A: Allocator
 {
-    v.into_iter().filter_map(|x| x.as_ref()).min_by_key(|x| x.path()).cloned()
+    v.into_iter()
+        .filter_map(|x| x.as_ref())
+        // TODO: to_vec needed because of RefCell. can be optimized
+        .min_by_key(|x| x.borrow().path().to_vec())
+        .map(|x| *x)
 }
 
-// TODO(igor): This function clones
-pub fn argmax<'a, 'path, V, A>
-    (v: &[&Option<ReadZipperUntracked<'a, 'path, V, A>>])
-     -> Option<ReadZipperUntracked<'a, 'path, V, A>>
+pub fn argmax<'r, 'a, 'path, V, A>
+    (v: &[&Option<&'r RefCell<ReadZipperUntracked<'a, 'path, V, A>>>])
+     -> Option<&'r RefCell<ReadZipperUntracked<'a, 'path, V, A>>>
 where V: Clone + Send + Sync + Unpin, A: Allocator
 {
-    v.into_iter().filter_map(|x| x.as_ref()).max_by_key(|x| x.path()).cloned()
+    v.into_iter()
+        .filter_map(|x| x.as_ref())
+        // TODO: to_vec needed because of RefCell. can be optimized
+        .max_by_key(|x| x.borrow().path().to_vec())
+        .map(|x| *x)
 }
 /*
     def difference_level(self, other):
         return next((e for e, (c1, c2) in enumerate(zip(self.path(), other.path())) if c1 != c2), None)
 */
-pub fn difference_level<'a, 'path, V, A>(
-    a: Option<&ReadZipperUntracked<'a, 'path, V, A>>,
-    b: Option<&ReadZipperUntracked<'a, 'path, V, A>>,
+pub fn difference_level<'r, 'a, 'path, V, A>(
+    a: &Option<&'r RefCell<ReadZipperUntracked<'a, 'path, V, A>>>,
+    b: &Option<&'r RefCell<ReadZipperUntracked<'a, 'path, V, A>>>,
 ) -> usize
 where V: Clone + Send + Sync + Unpin, A: Allocator
 {
     if let (Some(a), Some(b)) = (a, b) {
-        fast_slice_utils::find_prefix_overlap(a.path(), b.path())
+        fast_slice_utils::find_prefix_overlap(a.borrow().path(), b.borrow().path())
     } else {
         panic!("difference_level called with None");
     }
@@ -106,33 +112,42 @@ where V: Clone + Send + Sync + Unpin, A: Allocator
         return self
 */
 
-pub fn next<'a, 'path, V, A>(
-    a: &mut ReadZipperUntracked<'a, 'path, V, A>,
+pub fn next<'r, 'a, 'path, V, A>(
+    a: &'r RefCell<ReadZipperUntracked<'a, 'path, V, A>>,
     level: usize,
-) -> Option<ReadZipperUntracked<'a, 'path, V, A>>
+) -> Option<&'r RefCell<ReadZipperUntracked<'a, 'path, V, A>>>
 where V: Clone + Send + Sync + Unpin, A: Allocator
 {
-    assert!(level < a.path().len());
-    let to_ascend = a.path().len() - level - 1;
-    a.ascend(to_ascend);
+    let mut am = a.borrow_mut();
+    assert!(level < am.path().len());
+    let to_ascend = am.path().len() - level - 1;
+    am.ascend(to_ascend);
     loop {
-        if a.to_next_sibling_byte() {
+        if am.to_next_sibling_byte() {
             break;
         }
-        if !a.ascend_byte() {
+        if !am.ascend_byte() {
             return None;
         }
     }
-    Some(a.clone())
+    Some(a)
 }
 
-pub fn path<'r, 'a, 'path, V, A>(a: Option<&'r ReadZipperUntracked<'a, 'path, V, A>>) -> &'r [u8]
+pub fn path<'r, 'a, 'path, V, A>(
+    a: &Option<&'r RefCell<ReadZipperUntracked<'a, 'path, V, A>>>
+) -> Vec<u8>
 where V: Clone + Send + Sync + Unpin, A: Allocator
 {
-    a.as_ref().unwrap().path()
+    let ar = a.as_ref().unwrap();
+    let ar = ar.borrow();
+    eprintln!("path of {:?} is {:?}", ar.path(), ar.is_val());
+    // TODO: to_vec needed because of RefCell. can be optimized
+    a.as_ref().unwrap().borrow().path().to_vec()
 }
-pub fn is_val<'r, 'a, 'path, V, A>(a: Option<&'r ReadZipperUntracked<'a, 'path, V, A>>) -> bool
+pub fn is_val<'r, 'a, 'path, V, A>(
+    a: &Option<&'r RefCell<ReadZipperUntracked<'a, 'path, V, A>>>
+) -> bool
 where V: Clone + Send + Sync + Unpin, A: Allocator
 {
-    a.as_ref().unwrap().is_val()
+    a.as_ref().unwrap().borrow().is_val()
 }

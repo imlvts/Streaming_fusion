@@ -70,10 +70,11 @@ if __name__ == '__main__':
         for name, value in env.items():
             ty = "Option<u32>"
             init += f'\tlet __src_{name}: PathMap<{ty}> = {value.rs()};\n'
-            init += f'\tlet mut {name} = __src_{name}.read_zipper();\n'
+            init += f'\tlet {name} = RefCell::new(__src_{name}.read_zipper());\n'
         init += f'\tlet mut r = Vec::new();\n'
         code = s.getvalue()
         code = f"""
+use std::cell::RefCell;
 mod shim;
 #[allow(unused_imports)]
 use shim::{{
@@ -85,6 +86,8 @@ use shim::{{
 fn test() {{
 {init}
 {code}
+// eprintln!("wanted: {{:?}}", {expr.eval(env)});
+eprintln!("result: {{:?}}", r);
 }}
 fn main() {{ test(); }}
         """
