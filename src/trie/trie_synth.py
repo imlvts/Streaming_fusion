@@ -90,7 +90,7 @@ class Graph:
             print(f"let mut tmp_{src.name} = None;")
         print(f"let mut state = {state_id(self.init.name)};")
         print(f"'dispatch: loop {{")
-        print(f"println!(\"state {{}}\", state);")
+        # print(f"println!(\"state {{}}\", state);")
         print(f"\tmatch state {{")
         for state in self.vtcs:
             print(f"\t{state_id(state.name)} => {{")
@@ -147,7 +147,7 @@ class Graph:
                 print(f"\t\t\tstate = {state_id(t.s_to.name)};")
                 print(f"\t\t\tcontinue 'dispatch;")
                 print(f"\t\t}}")
-            print("\tbreak 'dispatch;")
+            print("\t\tbreak 'dispatch;")
             print(f'\t}},')
         print(f'\tunk_state => unreachable!("invalid state {{}}", unk_state),')
         print(f"\t}} // match state")

@@ -87,7 +87,10 @@ fn test() {{
 {init}
 {code}
 // eprintln!("wanted: {{:?}}", {expr.eval(env)});
-eprintln!("result: {{:?}}", r);
+println!("result:");
+for v in r {{
+    shim::print_path(&v);
+}}
 }}
 fn main() {{ test(); }}
         """

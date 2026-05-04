@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use std::cell::RefCell;
 // shim for PathMap methods
 use pathmap::alloc::{Allocator};
@@ -138,9 +139,6 @@ pub fn path<'r, 'a, 'path, V, A>(
 ) -> Vec<u8>
 where V: Clone + Send + Sync + Unpin, A: Allocator
 {
-    let ar = a.as_ref().unwrap();
-    let ar = ar.borrow();
-    eprintln!("path of {:?} is {:?}", ar.path(), ar.is_val());
     // TODO: to_vec needed because of RefCell. can be optimized
     a.as_ref().unwrap().borrow().path().to_vec()
 }
@@ -150,4 +148,11 @@ pub fn is_val<'r, 'a, 'path, V, A>(
 where V: Clone + Send + Sync + Unpin, A: Allocator
 {
     a.as_ref().unwrap().borrow().is_val()
+}
+pub fn print_path(path: &[u8]) {
+    if let Ok(s) = std::str::from_utf8(path) {
+        println!("{}", s);
+    } else {
+        println!("{:?}", path);
+    }
 }
