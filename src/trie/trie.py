@@ -570,7 +570,9 @@ class BitTrieMap(Generic[T]):
     def __repr__(self) -> str:
         items = ", ".join(f"{k!r}: {v!r}" for k, v in self.iterator())
         return f"BitTrieMap({{{items}}})"
-
+    def rs(self) -> str:
+        items = ", ".join(f'("{k}", {v})' for k, v in self.iterator())
+        return f"PathMap::from_iter([{items}])"
 
 def bittriemap(*items: tuple[str, T]) -> BitTrieMap[T]:
     return BitTrieMap.from_items(items)

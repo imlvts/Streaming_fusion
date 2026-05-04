@@ -64,6 +64,96 @@ class Graph:
                 print(f"\t\t\t\tcontinue")
             # print("\t\tprint(state, 'not continued!')")
             print("\t\tbreak")
+    def rs(self):
+        state_map = dict()
+        # convert state names to numbers for Rust codegen
+        def state_id(name):
+            if name not in state_map:
+                state_map[name] = len(state_map)
+            return state_map[name]
+        sources = set(src.name for src in self.srcs)
+        def make_ref(name):
+            if name in sources:
+                return f"Some(&{name})"
+            else:
+                return f"{name}.as_ref()"
+        defined_vars = set()
+        for state in self.vtcs:
+            for t in self.transitions:
+                if t.define_to_approach:
+                    varname, _values = t.define_to_approach
+                    defined_vars.add(varname)
+        print(f"// defined vars: {len(defined_vars)}")
+        for varname in defined_vars:
+            print(f"let mut {varname} = None;")
+        for src in self.srcs:
+            print(f"let mut tmp_{src.name} = None;")
+        print(f"let mut state = {state_id(self.init.name)};")
+        print(f"'dispatch: loop {{")
+        print(f"\tmatch state {{")
+        for state in self.vtcs:
+            print(f"\t{state_id(state.name)} => {{")
+            for t in self.transitions:
+                if t.s_from != state: continue
+                conditions = []
+                if t.active:
+                    conditions = [f"tmp_{c.name}.is_some()" for c in t.active]
+                if t.when:
+                    temp = []
+                    for c in t.when:
+                        match c:
+                            case Inequality(kind=kind, lhs=lhs, rhs=rhs): temp.append(f'path({make_ref(lhs.name)}) {kind} path({make_ref(rhs.name)})')
+                            case OpOrNot(kind=kind, lhs=lhs, rhs=rhs): temp.append(f'(tmp_{lhs.name}.is_none() || path({make_ref(lhs.name)}) {kind} path({make_ref(rhs.name)}))')
+                            case NEIfValue(kind=kind, lhs=lhs, rhs=rhs): temp.append( f'(tmp_{lhs.name}.is_none() || (path({make_ref(lhs.name)}) {kind} path({make_ref(rhs.name)}) || !is_val({make_ref(lhs.name)})))')
+                            case OpOrEqNotValue(kind=kind, lhs=lhs, rhs=rhs): temp.append(f'(tmp_{lhs.name}.is_none() || path({make_ref(lhs.name)}) {kind} path({make_ref(rhs.name)}) || (path({make_ref(lhs.name)}) == path({make_ref(rhs.name)}) && !is_val({make_ref(lhs.name)})))')
+                            case IsValue(lhs=lhs): temp.append(f'is_val({make_ref(lhs.name)})')
+                            case NotValue(lhs=lhs): temp.append(f'!is_val({make_ref(lhs.name)})')
+                            case PrefixOf(lhs=lhs, rhs=rhs, is_var=is_var):  temp.append(f'prefix_of(tmp_{lhs.name}.as_ref(), {rhs if is_var else f'tmp_{rhs.name}'}.as_ref())')
+                            case NotPrefixOf(lhs=lhs, rhs=rhs, is_var=is_var): temp.append(f'!prefix_of(tmp_{lhs.name}.as_ref(), {rhs if is_var else f'tmp_{rhs.name}'}.as_ref())')
+                            case Finished(lhs=lhs): temp.append(f'tmp_{lhs.name}.is_none()')
+                            case NotFinished(lhs=lhs): temp.append(f'tmp_{lhs.name}.is_some()')
+                            case VarNone(var=var): temp.append(f'{var}.is_none()')
+                    conditions += temp
+                print("")
+                print(f"\t\tif {' && '.join(conditions or ['true'])} {{")
+                if t.define_to_approach:
+                    varname, values = t.define_to_approach
+                    if len(values) == 1:
+                        print(
+                            f"\t\t\t{varname} = {f'argmax(&[{", ".join('&tmp_' + e.name for e in values[0])}])' if len(values[0]) > 1 else 'tmp_' + values[0][0].name}.clone();"
+                        )
+                    else:
+                        print(
+                            f"\t\t\t{varname} = argmin(&[{", ".join(f'argmax(&[{", ".join('&tmp_' + e.name for e in s)}])' if len(s) > 1 else '&tmp_' + s[0].name for s in values)}]);"
+                        )
+                for dst, src in t.push:
+                    print(f"\t\t\t{dst.name}.push(path(tmp_{src.name}.as_ref()).to_vec());")
+                for src in t.descend:
+                    print(f"\t\t\ttmp_{src.name} = descend_or_next(&mut {src.name});")
+                for src, ds in t.next_i:
+                    if len(ds) > 1:
+                        lvls = [f"difference_level({make_ref(src.name)}, {make_ref(rhs.name)})" for rhs in ds]
+                        print(f"\t\t\tlet diff_level = [{', '.join(lvls)}].into_iter().max().unwrap();")
+                        print(f"\t\t\ttmp_{src.name} = next(&mut {src.name}, diff_level);")
+                    else:
+                        print(f"\t\t\tlet diff_level = difference_level({make_ref(src.name)}, {make_ref(ds[0].name)});")
+                        print(f"\t\t\ttmp_{src.name} = next(&mut {src.name}, diff_level);")
+                for src, ds in t.next_i_var:
+                    print(f"\t\t\tlet diff_level = difference_level({make_ref(src.name)}, {make_ref(ds)});")
+                    print(f"\t\t\ttmp_{src.name} = next(&mut {src.name}, diff_level);")
+                for src in t.end:
+                    print(f"\t\t\ttmp_{src.name} = None;")
+                print(f"\t\t\tstate = {state_id(t.s_to.name)};")
+                print(f"\t\t\tcontinue 'dispatch;")
+                print(f"\t\t}}")
+            print(f'\t}},')
+        print(f'\tunk_state => unreachable!("invalid state {{}}", unk_state),')
+        print(f"\t}} // match state")
+        print(f"}} // 'dispatch: loop")
+        print("// state id mapping: {{ {} }}".format(
+            ", ".join(f"{v}: {k}" for k, v in state_map.items())
+        ))
+
     def dot(self, title=None):
         if title:
             title = title.replace("\\", "\\\\")
