@@ -1,9 +1,17 @@
-//! Benchmark: the same formula `(a | b) & c - d` evaluated three ways over the
+//! Benchmark: the same formula `(a | b) & c - d` evaluated four ways over the
 //! same tries:
 //!
 //!   * `macro`        — `synth_formula!` (compile-time codegen, RefCell zippers)
 //!   * `interpreter`  — `synth_jit::Graph::run` (runtime graph, raw pointers)
 //!   * `jit`          — `synth_jit::jit::Jit`   (Cranelift native code)
+//!   * `materialize`  — naive: build the full intermediate tries with PathMap's
+//!                      `join`/`meet`/`subtract` set algebra, one op at a time
+//!
+//! The first three stream the formula in a single fused traversal that never
+//! allocates an intermediate result set; `materialize` is the textbook approach
+//! that computes `a | b`, then `& c`, then `- d`, allocating a whole trie at
+//! each step. It's the baseline the fused passes are compared against (note that
+//! PathMap's set algebra shares subtries, so the naive version is no pushover).
 //!
 //! Run with: `cargo run --release --example bench`
 
@@ -25,6 +33,12 @@ use synth_macro::synth_formula;
 
 type Map = PathMap<Option<u32>>;
 
+/// Map used by the `materialize` baseline. Its value type is `()` because
+/// `PathMap::subtract` requires `V: DistributiveLattice`, which `Option<u32>`
+/// does not implement (but `()` does). The path *set* is identical to `Map`'s,
+/// which is all the materializing set algebra cares about.
+type UnitMap = PathMap<()>;
+
 /// Deterministic distinct 3-byte keys (LCG, no rand dependency). 3 bytes ->
 /// up to 16M distinct keys, so inputs can get large.
 fn gen_keys(seed: u64, count: usize) -> Vec<[u8; 3]> {
@@ -42,6 +56,21 @@ fn gen_keys(seed: u64, count: usize) -> Vec<[u8; 3]> {
 
 fn make_map(keys: &[[u8; 3]]) -> Map {
     PathMap::from_iter(keys.iter().map(|k| (k.as_slice(), None)))
+}
+
+fn make_unit_map(keys: &[[u8; 3]]) -> UnitMap {
+    PathMap::from_iter(keys.iter().map(|k| (k.as_slice(), ())))
+}
+
+/// Naive materializing evaluation of `(a | b) & c - d`: build each intermediate
+/// trie explicitly with PathMap's set algebra, then read out the resulting
+/// paths. Allocates a fresh trie per operator, unlike the fused passes.
+fn run_materialize(maps: &[&UnitMap; 4]) -> Vec<Vec<u8>> {
+    let [a, b, c, d] = *maps;
+    let union = a.join(b); // a | b
+    let inter = union.meet(c); // (a | b) & c
+    let result = inter.subtract(d); // (a | b) & c - d
+    result.iter().map(|(path, _)| path).collect()
 }
 
 fn run_interp(graph: &Graph, maps: &[&Map; 4]) -> Vec<Vec<u8>> {
@@ -102,11 +131,22 @@ fn sorted_unique(v: &[Vec<u8>]) -> Vec<Vec<u8>> {
 }
 
 fn run_all(n: usize, graph: &Graph, jit: &Jit) {
-    let ma = make_map(&gen_keys(1, n));
-    let mb = make_map(&gen_keys(2, n));
-    let mc = make_map(&gen_keys(3, n));
-    let md = make_map(&gen_keys(4, n));
+    let ka = gen_keys(1, n);
+    let kb = gen_keys(2, n);
+    let kc = gen_keys(3, n);
+    let kd = gen_keys(4, n);
+    let ma = make_map(&ka);
+    let mb = make_map(&kb);
+    let mc = make_map(&kc);
+    let md = make_map(&kd);
     let maps = [&ma, &mb, &mc, &md];
+
+    // Separate `()`-valued tries for the materializing baseline (same key sets).
+    let ua = make_unit_map(&ka);
+    let ub = make_unit_map(&kb);
+    let uc = make_unit_map(&kc);
+    let ud = make_unit_map(&kd);
+    let unit_maps = [&ua, &ub, &uc, &ud];
 
     // correctness: all three must agree.
     let macro_once = {
@@ -120,8 +160,10 @@ fn run_all(n: usize, graph: &Graph, jit: &Jit) {
     };
     let interp_once = run_interp(graph, &maps);
     let jit_once = run_jit(jit, &maps);
+    let mat_once = run_materialize(&unit_maps);
     assert_eq!(sorted_unique(&macro_once), sorted_unique(&interp_once));
     assert_eq!(sorted_unique(&interp_once), sorted_unique(&jit_once));
+    assert_eq!(sorted_unique(&jit_once), sorted_unique(&mat_once));
 
     println!(
         "--- {} keys x 4 sources, {} matched paths ---",
@@ -139,11 +181,15 @@ fn run_all(n: usize, graph: &Graph, jit: &Jit) {
     });
     let i = bench("interpreter", || run_interp(graph, &maps).len());
     let j = bench("jit", || run_jit(jit, &maps).len());
+    let mt = bench("materialize", || run_materialize(&unit_maps).len());
     println!(
-        "  speedup vs macro:  interpreter {:.2}x   jit {:.2}x   |   jit vs interpreter {:.2}x\n",
+        "  speedup vs macro:  interpreter {:.2}x   jit {:.2}x   |   jit vs interpreter {:.2}x\n  fused vs materialize:  macro {:.2}x   interpreter {:.2}x   jit {:.2}x\n",
         m / i,
         m / j,
-        i / j
+        i / j,
+        mt / m,
+        mt / i,
+        mt / j,
     );
 }
 
