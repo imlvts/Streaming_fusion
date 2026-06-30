@@ -7,3 +7,6 @@ edition = "2024"
 pathmap = { path = "../../PathMap" }
 fast-slice-utils = { version = "0.1.2", features=[] }
 synth_macro = { path = "synth_macro" }
+
+[dev-dependencies]
+synth_jit = { path = "synth_jit" }
