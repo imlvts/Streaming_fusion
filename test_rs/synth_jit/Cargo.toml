@@ -5,3 +5,8 @@ edition = "2024"
 
 [dependencies]
 pathmap = { path = "../../../PathMap" }
+cranelift-jit = "0.110"
+cranelift-module = "0.110"
+cranelift-codegen = "0.110"
+cranelift-frontend = "0.110"
+cranelift-native = "0.110"

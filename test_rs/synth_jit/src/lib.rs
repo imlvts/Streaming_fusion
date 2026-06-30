@@ -8,11 +8,12 @@
 //! responsible for keeping the zippers valid and exclusively borrowed for the
 //! duration of [`Graph::run`] (hence it is `unsafe`).
 //!
-//! [`run`](Graph::run) is the tree-walking interpreter. It is the correctness
-//! oracle for the upcoming machine-code JIT (`jit` module, todo): the JIT must
-//! produce identical output for the same graph and inputs.
+//! [`run`](Graph::run) is the tree-walking interpreter. It is also the
+//! correctness oracle for the Cranelift machine-code JIT in the [`jit`] module:
+//! the JIT must produce identical output for the same graph and inputs.
 
 pub mod formula;
+pub mod jit;
 
 use pathmap::alloc::Allocator;
 use pathmap::zipper::{ReadZipperUntracked, Zipper, ZipperMoving};
@@ -29,6 +30,30 @@ pub enum Cmp {
     Ne,
     Le,
     Ge,
+}
+
+impl Cmp {
+    pub fn to_i64(self) -> i64 {
+        match self {
+            Cmp::Lt => 0,
+            Cmp::Gt => 1,
+            Cmp::Eq => 2,
+            Cmp::Ne => 3,
+            Cmp::Le => 4,
+            Cmp::Ge => 5,
+        }
+    }
+    pub fn from_i64(v: i64) -> Cmp {
+        match v {
+            0 => Cmp::Lt,
+            1 => Cmp::Gt,
+            2 => Cmp::Eq,
+            3 => Cmp::Ne,
+            4 => Cmp::Le,
+            5 => Cmp::Ge,
+            _ => unreachable!("bad Cmp encoding {v}"),
+        }
+    }
 }
 
 /// Operand for the right-hand side of a `prefix_of`: either a source or the
@@ -98,7 +123,7 @@ impl Graph {
 ///
 /// # Safety
 /// `z` must point to a valid, exclusively-borrowed zipper.
-unsafe fn descend_or_next<'a, 'p, V, A>(z: *mut ReadZipperUntracked<'a, 'p, V, A>) -> bool
+pub(crate) unsafe fn descend_or_next<'a, 'p, V, A>(z: *mut ReadZipperUntracked<'a, 'p, V, A>) -> bool
 where
     V: Clone + Send + Sync + Unpin,
     A: Allocator,
@@ -122,7 +147,7 @@ where
 ///
 /// # Safety
 /// `z` must point to a valid, exclusively-borrowed zipper.
-unsafe fn next_at<'a, 'p, V, A>(z: *mut ReadZipperUntracked<'a, 'p, V, A>, level: usize) -> bool
+pub(crate) unsafe fn next_at<'a, 'p, V, A>(z: *mut ReadZipperUntracked<'a, 'p, V, A>, level: usize) -> bool
 where
     V: Clone + Send + Sync + Unpin,
     A: Allocator,
@@ -143,7 +168,7 @@ where
     true
 }
 
-fn cmp_ok(c: Cmp, a: &[u8], b: &[u8]) -> bool {
+pub(crate) fn cmp_ok(c: Cmp, a: &[u8], b: &[u8]) -> bool {
     match c {
         Cmp::Lt => a < b,
         Cmp::Gt => a > b,
@@ -156,7 +181,7 @@ fn cmp_ok(c: Cmp, a: &[u8], b: &[u8]) -> bool {
 
 /// Length of the common prefix of `a` and `b` (port of `difference_level` /
 /// `find_prefix_overlap`).
-fn common_prefix(a: &[u8], b: &[u8]) -> usize {
+pub(crate) fn common_prefix(a: &[u8], b: &[u8]) -> usize {
     a.iter().zip(b).take_while(|(x, y)| x == y).count()
 }
 
