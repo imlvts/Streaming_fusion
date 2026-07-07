@@ -15,8 +15,7 @@
 pub mod formula;
 pub mod jit;
 
-use pathmap::alloc::Allocator;
-use pathmap::zipper::{ReadZipperUntracked, Zipper, ZipperMoving};
+use pathmap::zipper::{Zipper, ZipperMoving};
 
 // ---------------------------------------------------------------------------
 // Runtime IR
@@ -123,11 +122,7 @@ impl Graph {
 ///
 /// # Safety
 /// `z` must point to a valid, exclusively-borrowed zipper.
-pub(crate) unsafe fn descend_or_next<'a, 'p, V, A>(z: *mut ReadZipperUntracked<'a, 'p, V, A>) -> bool
-where
-    V: Clone + Send + Sync + Unpin,
-    A: Allocator,
-{
+pub(crate) unsafe fn descend_or_next<Z: ZipperMoving>(z: *mut Z) -> bool {
     let zr = unsafe { &mut *z };
     if !zr.descend_first_byte() {
         loop {
@@ -147,11 +142,7 @@ where
 ///
 /// # Safety
 /// `z` must point to a valid, exclusively-borrowed zipper.
-pub(crate) unsafe fn next_at<'a, 'p, V, A>(z: *mut ReadZipperUntracked<'a, 'p, V, A>, level: usize) -> bool
-where
-    V: Clone + Send + Sync + Unpin,
-    A: Allocator,
-{
+pub(crate) unsafe fn next_at<Z: ZipperMoving>(z: *mut Z, level: usize) -> bool {
     let zr = unsafe { &mut *z };
     let plen = zr.path().len();
     debug_assert!(level < plen, "next level {level} out of range for path len {plen}");
@@ -189,18 +180,41 @@ pub(crate) fn common_prefix(a: &[u8], b: &[u8]) -> usize {
 // Interpreter
 // ---------------------------------------------------------------------------
 
+/// Receives the paths matched by [`Graph::run`].
+///
+/// Implemented for `Vec<Vec<u8>>` (collect owned copies) and for any
+/// `FnMut(&[u8])` (stream without allocating). The `&[u8]` argument borrows
+/// the emitting zipper's path buffer and is only valid for the duration of
+/// the call.
+pub trait Sink {
+    fn push(&mut self, path: &[u8]);
+}
+
+impl Sink for Vec<Vec<u8>> {
+    fn push(&mut self, path: &[u8]) {
+        self.push(path.to_vec());
+    }
+}
+
+impl<F: FnMut(&[u8])> Sink for F {
+    fn push(&mut self, path: &[u8]) {
+        self(path)
+    }
+}
+
 /// Per-call execution state, kept in registers/stack rather than per-source
-/// `RefCell`s.
-struct Exec<'z, 'a, 'p, V: Clone + Send + Sync, A: Allocator> {
-    z: &'z [*mut ReadZipperUntracked<'a, 'p, V, A>],
+/// `RefCell`s. Generic over the zipper type: any `Zipper + ZipperMoving`
+/// works as a source, e.g. `ReadZipperUntracked` (PathMap) or `ACTZipper`
+/// (ArenaCompactTree).
+struct Exec<'z, Z> {
+    z: &'z [*mut Z],
     finished: Vec<bool>,
     m: Option<usize>,
 }
 
-impl<'z, 'a, 'p, V, A> Exec<'z, 'a, 'p, V, A>
+impl<'z, Z> Exec<'z, Z>
 where
-    V: Clone + Send + Sync + Unpin,
-    A: Allocator,
+    Z: Zipper + ZipperMoving,
 {
     /// Borrow the path of source `i`. Reads the live zipper regardless of the
     /// `finished` flag (matching `make_ref` -> `&Some(&src)` in the codegen).
@@ -281,12 +295,12 @@ where
         }
     }
 
-    fn exec(&mut self, t: &Transition, sink: &mut Vec<Vec<u8>>) {
+    fn exec<S: Sink + ?Sized>(&mut self, t: &Transition, sink: &mut S) {
         if let Some(values) = &t.define {
             self.m = self.eval_define(values);
         }
         for &i in &t.push {
-            sink.push(self.path(i).to_vec());
+            sink.push(self.path(i));
         }
         for &i in &t.descend {
             self.finished[i] = !unsafe { descend_or_next(self.z[i]) };
@@ -316,18 +330,19 @@ where
 impl Graph {
     /// Run the state machine. `zippers[i]` must correspond to `source_names[i]`
     /// and stay valid and exclusively borrowed for the call. Pushes matched
-    /// paths into `sink`.
+    /// paths into `sink` — a `Vec<Vec<u8>>` to collect them, or any
+    /// `FnMut(&[u8])` to stream them without allocating (see [`Sink`]).
+    ///
+    /// Sources are any `Zipper + ZipperMoving`, e.g. PathMap's
+    /// `ReadZipperUntracked` or ArenaCompactTree's `ACTZipper`.
     ///
     /// # Safety
     /// Every pointer in `zippers` must be valid, aligned, and not aliased
     /// elsewhere while this runs.
-    pub unsafe fn run<'a, 'p, V, A>(
-        &self,
-        zippers: &[*mut ReadZipperUntracked<'a, 'p, V, A>],
-        sink: &mut Vec<Vec<u8>>,
-    ) where
-        V: Clone + Send + Sync + Unpin,
-        A: Allocator,
+    pub unsafe fn run<Z, S>(&self, zippers: &[*mut Z], sink: &mut S)
+    where
+        Z: Zipper + ZipperMoving,
+        S: Sink + ?Sized,
     {
         assert_eq!(zippers.len(), self.num_sources(), "wrong number of zippers");
         let mut exec = Exec {

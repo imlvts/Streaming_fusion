@@ -44,6 +44,46 @@ fn want(items: &[&str]) -> Vec<String> {
     s
 }
 
+/// Same as [run_formula] but streams into a closure sink instead of a Vec.
+fn run_formula_fn_sink(formula: &str, env: &[(&str, &[&str])]) -> Vec<String> {
+    let graph = build_graph(formula).expect("valid formula");
+    let maps: Vec<PathMap<Option<u32>>> = graph
+        .source_names
+        .iter()
+        .map(|name| {
+            let items = env
+                .iter()
+                .find(|(n, _)| n == name)
+                .unwrap_or_else(|| panic!("no data for source {name}"))
+                .1;
+            PathMap::from_iter(items.iter().map(|s| (*s, None)))
+        })
+        .collect();
+    let mut zippers: Vec<_> = maps.iter().map(|m| m.read_zipper()).collect();
+    let ptrs: Vec<*mut _> = zippers.iter_mut().map(|z| z as *mut _).collect();
+
+    let mut out: Vec<String> = Vec::new();
+    let mut sink = |path: &[u8]| out.push(String::from_utf8(path.to_vec()).unwrap());
+    unsafe { graph.run(&ptrs, &mut sink) };
+
+    out.sort();
+    out.dedup();
+    out
+}
+
+#[test]
+fn fn_sink_matches_vec_sink() {
+    let env: &[(&str, &[&str])] = &[
+        ("a", &["001", "100", "101", "110"]),
+        ("b", &["001", "010", "100", "101"]),
+        ("c", &["010", "011", "100", "101"]),
+        ("d", &["000", "100"]),
+    ];
+    let formula = "(a | b) & c - d";
+    assert_eq!(run_formula_fn_sink(formula, env), run_formula(formula, env));
+    assert_eq!(run_formula_fn_sink(formula, env), want(&["010", "101"]));
+}
+
 #[test]
 fn union_intersect_diff() {
     let got = run_formula(

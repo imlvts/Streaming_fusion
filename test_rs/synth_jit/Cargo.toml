@@ -10,3 +10,7 @@ cranelift-module = "0.110"
 cranelift-codegen = "0.110"
 cranelift-frontend = "0.110"
 cranelift-native = "0.110"
+
+[dev-dependencies]
+pathmap = { path = "../../../PathMap", features = ["arena_compact"] }
+tempfile = "3"
