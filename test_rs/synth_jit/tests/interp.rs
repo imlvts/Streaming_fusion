@@ -28,20 +28,15 @@ fn run_formula(formula: &str, env: &[(&str, &[&str])]) -> Vec<String> {
     let mut sink: Vec<Vec<u8>> = Vec::new();
     unsafe { graph.run(&ptrs, &mut sink) };
 
-    let mut out: Vec<String> = sink
-        .into_iter()
+    sink.into_iter()
         .map(|v| String::from_utf8(v).unwrap())
-        .collect();
-    out.sort();
-    out.dedup();
-    out
+        .collect()
 }
 
+/// The machine emits paths in ascending order with no duplicates, so the
+/// expected output is asserted exactly — no sorting or dedup on either side.
 fn want(items: &[&str]) -> Vec<String> {
-    let mut s: Vec<String> = items.iter().map(|x| x.to_string()).collect();
-    s.sort();
-    s.dedup();
-    s
+    items.iter().map(|x| x.to_string()).collect()
 }
 
 /// Same as [run_formula] but streams into a closure sink instead of a Vec.
@@ -65,9 +60,6 @@ fn run_formula_fn_sink(formula: &str, env: &[(&str, &[&str])]) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     let mut sink = |path: &[u8]| out.push(String::from_utf8(path.to_vec()).unwrap());
     unsafe { graph.run(&ptrs, &mut sink) };
-
-    out.sort();
-    out.dedup();
     out
 }
 

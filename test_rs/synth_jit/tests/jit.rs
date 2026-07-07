@@ -30,13 +30,9 @@ fn jit_run(formula: &str, env: &[(&str, &[&str])]) -> Vec<String> {
     let mut sink: Vec<Vec<u8>> = Vec::new();
     unsafe { jit.run(&ptrs, &mut sink) };
 
-    let mut out: Vec<String> = sink
-        .into_iter()
+    sink.into_iter()
         .map(|v| String::from_utf8(v).unwrap())
-        .collect();
-    out.sort();
-    out.dedup();
-    out
+        .collect()
 }
 
 /// Same as [jit_run] but streams into a closure sink, and reuses the same
@@ -66,20 +62,16 @@ fn jit_run_fn_sink(formula: &str, env: &[(&str, &[&str])]) -> Vec<String> {
         let mut sink = |path: &[u8]| out.push(String::from_utf8(path.to_vec()).unwrap());
         unsafe { jit.run(&ptrs, &mut sink) };
     }
-    out.sort();
-    out.dedup();
 
     // Same compiled artifact, different sink type on the second call.
     let mut zippers: Vec<_> = maps.iter().map(|m| m.read_zipper()).collect();
     let ptrs: Vec<*mut _> = zippers.iter_mut().map(|z| z as *mut _).collect();
     let mut vec_sink: Vec<Vec<u8>> = Vec::new();
     unsafe { jit.run(&ptrs, &mut vec_sink) };
-    let mut out2: Vec<String> = vec_sink
+    let out2: Vec<String> = vec_sink
         .into_iter()
         .map(|v| String::from_utf8(v).unwrap())
         .collect();
-    out2.sort();
-    out2.dedup();
     assert_eq!(out, out2, "closure sink and Vec sink disagree");
 
     out
@@ -98,11 +90,10 @@ fn jit_fn_sink_matches_vec_sink() {
     assert_eq!(jit_run_fn_sink(formula, env), want(&["010", "101"]));
 }
 
+/// The machine emits paths in ascending order with no duplicates, so the
+/// expected output is asserted exactly — no sorting or dedup on either side.
 fn want(items: &[&str]) -> Vec<String> {
-    let mut s: Vec<String> = items.iter().map(|x| x.to_string()).collect();
-    s.sort();
-    s.dedup();
-    s
+    items.iter().map(|x| x.to_string()).collect()
 }
 
 #[test]

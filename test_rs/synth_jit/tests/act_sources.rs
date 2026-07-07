@@ -46,9 +46,6 @@ fn run_formula_act(formula: &str, env: &[(&str, &[&str])]) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     let mut sink = |path: &[u8]| out.push(String::from_utf8(path.to_vec()).unwrap());
     unsafe { graph.run(&ptrs, &mut sink) };
-
-    out.sort();
-    out.dedup();
     out
 }
 
@@ -66,15 +63,13 @@ fn run_formula_pathmap(formula: &str, env: &[(&str, &[&str])]) -> Vec<String> {
     let mut sink: Vec<Vec<u8>> = Vec::new();
     unsafe { graph.run(&ptrs, &mut sink) };
 
-    let mut out: Vec<String> = sink
-        .into_iter()
+    sink.into_iter()
         .map(|v| String::from_utf8(v).unwrap())
-        .collect();
-    out.sort();
-    out.dedup();
-    out
+        .collect()
 }
 
+/// The machine emits paths in ascending order with no duplicates, so the
+/// expected output is asserted exactly — no sorting or dedup on either side.
 fn check(formula: &str, env: &[(&str, &[&str])], expect: &[&str]) {
     let want: Vec<String> = expect.iter().map(|s| s.to_string()).collect();
     assert_eq!(run_formula_act(formula, env), want, "ACT sources: {formula}");

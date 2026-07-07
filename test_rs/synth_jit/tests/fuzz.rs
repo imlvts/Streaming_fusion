@@ -75,7 +75,9 @@ fn eval(e: &E, env: &std::collections::HashMap<char, HashSet<String>>) -> HashSe
     }
 }
 
-fn interp_result(formula: &str, env: &std::collections::HashMap<char, HashSet<String>>) -> HashSet<String> {
+/// Raw emission sequence from the interpreter — no sorting or dedup, since
+/// the machine is designed to emit paths in ascending order exactly once.
+fn interp_result(formula: &str, env: &std::collections::HashMap<char, HashSet<String>>) -> Vec<String> {
     let graph = build_graph(formula).expect("valid formula");
     let maps: Vec<PathMap<Option<u32>>> = graph
         .source_names
@@ -127,8 +129,13 @@ fn fuzz_against_set_oracle() {
             env.insert(v, set);
         }
 
-        let expected = eval(&expr, &env);
+        let mut expected: Vec<String> = eval(&expr, &env).into_iter().collect();
+        expected.sort();
         let got = interp_result(&formula, &env);
+        assert!(
+            got.windows(2).all(|w| w[0] < w[1]),
+            "formula `{formula}` env {env:?}: output not strictly increasing: {got:?}"
+        );
         assert_eq!(
             got, expected,
             "formula `{formula}` env {env:?}: got {got:?} expected {expected:?}"
