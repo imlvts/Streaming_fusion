@@ -10,3 +10,5 @@ synth_macro = { path = "synth_macro" }
 
 [dev-dependencies]
 synth_jit = { path = "synth_jit" }
+# arena_compact only for tests (act_big_hex.rs)
+pathmap = { path = "../../PathMap", features = ["arena_compact"] }

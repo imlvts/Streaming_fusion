@@ -331,6 +331,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "59dbb09ed53f8e4f314e353dc6c1853ae5b4c480a668a422657804a544ea9f65"
 
 [[package]]
+name = "memmap2"
+version = "0.9.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d1219ed1b7f229ee7104d281dd01d6802fe28bb6e95d292942c4daacdeb798c0"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "num-traits"
 version = "0.2.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -356,6 +365,7 @@ dependencies = [
  "libz-ng-sys",
  "local-or-heap",
  "maybe-dangling",
+ "memmap2",
  "num-traits",
  "pathmap-derive",
  "reusing-vec",
