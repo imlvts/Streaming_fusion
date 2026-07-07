@@ -295,7 +295,9 @@ where
         }
     }
 
-    fn exec<S: Sink + ?Sized>(&mut self, t: &Transition, sink: &mut S) {
+    /// Returns `true` if the transition advanced the machine (moved or
+    /// finished a zipper) — used by the non-termination guard in `run`.
+    fn exec<S: Sink + ?Sized>(&mut self, t: &Transition, sink: &mut S) -> bool {
         if let Some(values) = &t.define {
             self.m = self.eval_define(values);
         }
@@ -324,6 +326,10 @@ where
         for &i in &t.end {
             self.finished[i] = true;
         }
+        !t.descend.is_empty()
+            || !t.next_i.is_empty()
+            || !t.next_i_var.is_empty()
+            || !t.end.is_empty()
     }
 }
 
@@ -352,18 +358,24 @@ impl Graph {
         };
 
         let mut state = self.init;
-        // Generous guard against a buggy non-terminating graph.
-        let mut guard: u64 = 0;
+        // Guard against a buggy non-terminating graph: total transition count
+        // scales with input size, so instead count consecutive transitions
+        // that don't advance any zipper. Real work always advances; a stuck
+        // graph cycles through no-op transitions.
+        let mut stalled: u64 = 0;
         loop {
-            guard += 1;
-            assert!(guard < 1_000_000_000, "state machine did not terminate");
-
             let mut moved = false;
             for t in &self.states[state] {
                 if exec.matches(t) {
-                    exec.exec(t, sink);
+                    let progressed = exec.exec(t, sink);
                     state = t.to;
                     moved = true;
+                    if progressed {
+                        stalled = 0;
+                    } else {
+                        stalled += 1;
+                        assert!(stalled < 1_000_000, "state machine stopped making progress");
+                    }
                     break;
                 }
             }
