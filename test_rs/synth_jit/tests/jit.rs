@@ -39,6 +39,65 @@ fn jit_run(formula: &str, env: &[(&str, &[&str])]) -> Vec<String> {
     out
 }
 
+/// Same as [jit_run] but streams into a closure sink, and reuses the same
+/// compiled `Jit` for a second run with a `Vec` sink (the sink type is
+/// per-call, not baked into the compiled code).
+fn jit_run_fn_sink(formula: &str, env: &[(&str, &[&str])]) -> Vec<String> {
+    let graph = build_graph(formula).expect("valid formula");
+    let jit = Jit::compile::<Option<u32>, ()>(&graph);
+
+    let maps: Vec<PathMap<Option<u32>>> = graph
+        .source_names
+        .iter()
+        .map(|name| {
+            let items = env
+                .iter()
+                .find(|(n, _)| n == name)
+                .map(|(_, v)| *v)
+                .unwrap_or(&[]);
+            PathMap::from_iter(items.iter().map(|s| (*s, None)))
+        })
+        .collect();
+
+    let mut out: Vec<String> = Vec::new();
+    {
+        let mut zippers: Vec<_> = maps.iter().map(|m| m.read_zipper()).collect();
+        let ptrs: Vec<*mut _> = zippers.iter_mut().map(|z| z as *mut _).collect();
+        let mut sink = |path: &[u8]| out.push(String::from_utf8(path.to_vec()).unwrap());
+        unsafe { jit.run(&ptrs, &mut sink) };
+    }
+    out.sort();
+    out.dedup();
+
+    // Same compiled artifact, different sink type on the second call.
+    let mut zippers: Vec<_> = maps.iter().map(|m| m.read_zipper()).collect();
+    let ptrs: Vec<*mut _> = zippers.iter_mut().map(|z| z as *mut _).collect();
+    let mut vec_sink: Vec<Vec<u8>> = Vec::new();
+    unsafe { jit.run(&ptrs, &mut vec_sink) };
+    let mut out2: Vec<String> = vec_sink
+        .into_iter()
+        .map(|v| String::from_utf8(v).unwrap())
+        .collect();
+    out2.sort();
+    out2.dedup();
+    assert_eq!(out, out2, "closure sink and Vec sink disagree");
+
+    out
+}
+
+#[test]
+fn jit_fn_sink_matches_vec_sink() {
+    let env: &[(&str, &[&str])] = &[
+        ("a", &["001", "100", "101", "110"]),
+        ("b", &["001", "010", "100", "101"]),
+        ("c", &["010", "011", "100", "101"]),
+        ("d", &["000", "100"]),
+    ];
+    let formula = "(a | b) & c - d";
+    assert_eq!(jit_run_fn_sink(formula, env), jit_run(formula, env));
+    assert_eq!(jit_run_fn_sink(formula, env), want(&["010", "101"]));
+}
+
 fn want(items: &[&str]) -> Vec<String> {
     let mut s: Vec<String> = items.iter().map(|x| x.to_string()).collect();
     s.sort();

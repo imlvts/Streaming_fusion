@@ -23,7 +23,7 @@ use cranelift_module::{default_libcall_names, Linkage, Module};
 use pathmap::alloc::Allocator;
 use pathmap::zipper::{ReadZipperUntracked, Zipper, ZipperMoving};
 
-use crate::{cmp_ok, common_prefix, descend_or_next, next_at, Cmp, Cond, Graph, Ref, Transition};
+use crate::{cmp_ok, common_prefix, descend_or_next, next_at, Cmp, Cond, Graph, Ref, Sink, Transition};
 
 // ---------------------------------------------------------------------------
 // Runtime context shared between the JIT'd code and the helpers
@@ -39,7 +39,22 @@ pub struct JitCtx {
     finished: *mut u8,
     /// current `m`: a source index, or -1 for None.
     m: i64,
-    sink: *mut Vec<Vec<u8>>,
+    /// Type-erased [`Sink`]: `sink_push` is a monomorphized trampoline that
+    /// casts `sink_data` back to the concrete sink. Only the `h_act_push`
+    /// helper touches these; the JIT'd code never reads past `m`, so the
+    /// baked-in field offsets are unaffected.
+    sink_data: *mut c_void,
+    sink_push: unsafe fn(*mut c_void, *const u8, usize),
+}
+
+/// Trampoline stored in [`JitCtx::sink_push`], monomorphized per sink type.
+///
+/// # Safety
+/// `data` must be the `*mut S` that was erased into [`JitCtx::sink_data`],
+/// and `ptr`/`len` must describe a live byte slice.
+unsafe fn sink_push<S: Sink>(data: *mut c_void, ptr: *const u8, len: usize) {
+    let sink = unsafe { &mut *data.cast::<S>() };
+    sink.push(unsafe { core::slice::from_raw_parts(ptr, len) });
 }
 
 // Field byte offsets (64-bit, repr(C)).
@@ -199,8 +214,8 @@ where
     A: Allocator,
 {
     let c = unsafe { &mut *ctx };
-    let p = unsafe { path::<V, A>(c, i) }.to_vec();
-    unsafe { (*c.sink).push(p) };
+    let p = unsafe { path::<V, A>(c, i) };
+    unsafe { (c.sink_push)(c.sink_data, p.as_ptr(), p.len()) };
 }
 
 extern "C" fn h_act_descend<V, A>(ctx: *mut JitCtx, i: i64)
@@ -379,17 +394,21 @@ impl Jit {
     }
 
     /// Run the compiled machine. `zippers[i]` corresponds to `source_names[i]`.
+    /// `sink` is any [`Sink`]: a `Vec<Vec<u8>>` to collect owned copies, or an
+    /// `FnMut(&[u8])` called with the borrowed path (no allocation). The sink
+    /// type is per-call; it does not have to match across runs of one `Jit`.
     ///
     /// # Safety
     /// `<V, A>` must match the types passed to [`compile`](Jit::compile), and
     /// every zipper pointer must be valid and exclusively borrowed for the call.
-    pub unsafe fn run<V, A>(
+    pub unsafe fn run<V, A, S>(
         &self,
         zippers: &[*mut ReadZipperUntracked<V, A>],
-        sink: &mut Vec<Vec<u8>>,
+        sink: &mut S,
     ) where
         V: Clone + Send + Sync,
         A: Allocator,
+        S: Sink,
     {
         assert_eq!(zippers.len(), self.num_sources, "wrong number of zippers");
         let zptrs: Vec<*mut c_void> = zippers.iter().map(|&z| z as *mut c_void).collect();
@@ -398,7 +417,8 @@ impl Jit {
             zippers: zptrs.as_ptr(),
             finished: finished.as_mut_ptr(),
             m: -1,
-            sink: sink as *mut _,
+            sink_data: (sink as *mut S).cast::<c_void>(),
+            sink_push: sink_push::<S>,
         };
         let f: extern "C" fn(*mut JitCtx) = unsafe { core::mem::transmute(self.func) };
         f(&mut ctx);
